@@ -41,4 +41,4 @@ git clone https://github.com/elfametesar/Payload2Super
 
 This is a multi-platform tool, meaning it can work on both x64 Linux distros and arm64 Android devices. To use it on Linux distros, you need ADB access once to your device in order to get the super block size.
 
-Warning: Some shell may not be compatible, so make sure to use it on BASH,ZSH or a newer version of SHELL. Android shells are compatible.
+Warning: Some shell may not be compatible, so make sure to use it on BASH,ZSH or a newer version of SHELL. Android SHELL is compatible.
