@@ -141,7 +141,7 @@ extract() {
 		}
 	}
 	echo -e "Extracting images from payload (This takes a while)\n"
-	payload-dumper -o extracted $PAYLOAD 1> /dev/null || { echo "Program cannot extract payload"; exit 1; }
+	payload-dumper -c ${CPU:-1} -o extracted $PAYLOAD 1> /dev/null || { echo "Program cannot extract payload"; exit 1; }
 	cd extracted
 }
 
@@ -187,14 +187,12 @@ get_super_size() {
 }
 
 shrink_before_resize() {
-	if [[ $shrink == "y" ]]; then
-		echo -e "Shrinking partitions...\n"
-		sh $HOME/pay2sup_helper.sh shrink \
-			system*.img\
-		       	odm.img\
-		       	product.img\
-			vendor.img 1> /dev/null
-	fi
+	echo -e "Shrinking partitions...\n"
+	sh $HOME/pay2sup_helper.sh shrink \
+		system*.img\
+	       	odm.img\
+	       	product.img\
+		vendor.img 1> /dev/null
 }
 
 get_read_write_state() {
