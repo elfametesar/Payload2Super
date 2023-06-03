@@ -5,7 +5,7 @@ calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 
 shrink() {
 	for img in "$@"; do
-		mount $img $TEMP
+		mount $img $TEMP || mount $img $TEMP || exit 1 # Android fails to mount the first time sometimes, working around Android's retardness
 		total_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $2}')
         	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
 		umount $TEMP
