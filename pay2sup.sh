@@ -189,10 +189,11 @@ get_super_size() {
 shrink_before_resize() {
 	echo -e "Shrinking partitions...\n"
 	sh $HOME/pay2sup_helper.sh shrink \
-		system*.img\
-	       	odm.img\
-	       	product.img\
-		vendor.img 1> /dev/null
+	       system.img \
+	       system_ext.img \
+	       odm.img \
+	       product.img \
+	       vendor.img 1> /dev/null
 }
 
 get_read_write_state() {
@@ -217,7 +218,7 @@ resize() {
 	echo -en "Do you wish to shrink partitions to their minimum sizes before resizing? (y/n): "
 	read shrink
 	echo
-	[[ $shrink == "y" ]] && shrink_before_resize 2&> /dev/null
+	[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
 	for img in system*.img vendor.img odm.img product.img; do
 		if dump.erofs $img &> /dev/null; then
 			if [[ $READ_ONLY == 0 ]]; then

@@ -4,19 +4,20 @@ trap "umount $TEMP $TEMP2 2> /dev/null" EXIT
 calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 
 shrink() {
+	echo "$@"
 	for img in "$@"; do
 		loop=$(losetup -f)
 		losetup $loop $img
-		mount $loop $TEMP 
+		mount $loop $TEMP || { echo -e "There was a problem shrinking $img, skipping\n" 1>&2; continue; }
 		total_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $2}')
         	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
 		umount $TEMP
 		losetup -d $loop
 		shrink_space=$(calc $total_size-$space_size)
-		shrink_space=$(calc $shrink_space/1024/1024+50)
-		while ! resize2fs -f $img ${shrink_space}M; do
+		shrink_space=$(calc $shrink_space/1024/1024)
+		resize2fs -f $img ${shrink_space}M || while true; do
 			shrink_space=$( calc "$shrink_space+5" )
-			resize2fs -f $img ${shrink_space}M
+			resize2fs -f $img ${shrink_space}M && break
 		done
 		e2fsck -fy $img
 	done
