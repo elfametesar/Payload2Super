@@ -5,10 +5,13 @@ calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 
 shrink() {
 	for img in "$@"; do
-		mount $img $TEMP || mount $img $TEMP || exit 1 # Android fails to mount the first time sometimes, working around Android's retardness
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount $loop $TEMP 
 		total_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $2}')
         	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
 		umount $TEMP
+		losetup -d $loop
 		shrink_space=$(calc $total_size-$space_size)
 		shrink_space=$(calc $shrink_space/1024/1024+50)
 		while ! resize2fs -f $img ${shrink_space}M; do
