@@ -22,7 +22,7 @@ OPTION 3: pay2sup.sh [-rw|--read-write] [-r|--resize] [-c|--continue]
 Note that --remake, --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use --remake <super_flashable.zip> and payload.zip|.bin or --continue flags mixed with together. They are mutually exclusive.
 ```
 
-This tool has only been tested on POCO F3 device, and is compatible with devices that have the same type of super partition scheme. You are free to test it on your device and give feedbacks.
+This tool has only been tested on POCO F3 device, and ~~is compatible with devices that have the same type of super partition scheme.~~ Experimental branch is aimed to support multiple devices unlike the main branch, however it requires testers, which I have none. You are free to test it on your device and give feedbacks.
 
 It basically converts any payload flashable ROMs into super flashables to make flashing easier and faster. You can also repack super flashables to grant them read&write access and increase/decrease partition sizes or disable Android's file encryption.
 
@@ -42,9 +42,37 @@ cd Payload2Super
 # Example Usage
 
 ```
-sh pay2sup -rw -r -dfe -t $(nproc --all) <path-to-your-rom-file>
+sh pay2sup.sh -rw -r -dfe -t $(nproc --all) <path-to-your-rom-file>
 ```
 
-This is a multi-platform tool, meaning it can work on both x64 Linux distros and arm64 Android devices. To use it on Linux distros, you need ADB access once to your device in order to get the super block size.
+This is a multi-platform tool, meaning it can work on both x64 Linux distros and ARM64 Android devices. ~~To use it on Linux distros, you need ADB access once to your device in order to get the super block size.~~ You can now use this tool without needing ADB access, by manually adding super block size and slot suffix, only in experimental branch.
 
-Warning: Some shells may not be compatible, so make sure to use it on BASH,ZSH or a newer version of SHELL. Android SHELL is compatible.
+Warning: Some shells may not be compatible, so make sure to use it on BASH, ZSH or a newer version of SHELL. Android SHELL is compatible. BASH is recommended.
+
+
+# Usage for dummies
+Start by typing in
+```
+sh pay2sup.sh 
+```
+And add your optional parameters, for read&write access:
+```
+sh pay2sup.sh -rw
+```
+For resizing partition images:
+```
+sh pay2sup.sh -rw -r
+```
+For disabling encryption:
+```
+sh pay2sup.sh -rw -r -dfe
+```
+For using multiple cores to make the program faster:
+```
+sh pay2sup.sh -rw -r -dfe -t <corenumber>
+```
+And finally in the end, specify your ROM path:
+```
+sh pay2sup.sh -rw -r -dfe -t <corenumber> <path-to-ROM>
+```
+
