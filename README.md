@@ -37,6 +37,12 @@ It basically converts any payload flashable ROMs into super flashables to make f
 
 ```
 git clone https://github.com/elfametesar/Payload2Super
+cd Payload2Super
+```
+# Example Usage
+
+```
+sh pay2sup -rw -r -dfe -t $(nproc --all) <path-to-your-rom-file>
 ```
 
 This is a multi-platform tool, meaning it can work on both x64 Linux distros and arm64 Android devices. To use it on Linux distros, you need ADB access once to your device in order to get the super block size.
