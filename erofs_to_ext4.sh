@@ -5,7 +5,7 @@ TEMP2=${TEMP}2
 [[ -d $TEMP2 ]] && rm -rf $TEMP2 
 mkdir $TEMP $TEMP2
 
-trap "umount $TEMP $TEMP2 2>/dev/null" EXIT
+trap "losetup -D 2>/dev/null" EXIT
 
 calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 

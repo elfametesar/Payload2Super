@@ -1,6 +1,6 @@
 #!/bin/env sh
 
-trap "umount $TEMP $TEMP2 2> /dev/null" EXIT
+trap "losetup -D 2> /dev/null" EXIT
 calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 
 shrink() {
@@ -12,7 +12,7 @@ shrink() {
 		total_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $2}')
         	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
 		umount $TEMP
-		losetup -d $loop
+		losetup -D
 		shrink_space=$(calc $total_size-$space_size)
 		shrink_space=$(calc $shrink_space/1024/1024)
 		resize2fs -f $img ${shrink_space}M || while true; do
