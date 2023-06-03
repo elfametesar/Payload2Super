@@ -87,7 +87,9 @@ disable_encryption() {
 	vendor=$HOME/extracted/vendor.img
 	fallocate -l $( calc $(stat -c%s $vendor)+52428800) $vendor
 	resize2fs -f $vendor &> /dev/null
-	mount $vendor $TEMP || \
+	loop=$(losetup -f)
+	losetup $loop $vendor
+	mount $loop $TEMP || \
 		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
 
 	echo -e "Disabling Android file encryption system...\n"
