@@ -35,6 +35,15 @@ It basically converts any payload flashable ROMs into super flashables to make f
  - Can use multi-threads to make process faster
  - Can continue if the program has exited in the middle of a process.
 
+# FAQ
+ - I get an error while repacking super, or resizing partitions, saying partition sizes exceed the super block size, what do I do?
+This happens more often because the ROM you're converting is EROFS and while converting to EXT4, it has to get bigger because of the filesystems' compression rates. If the source ROM is too big, this error can happen. To work around it, you have to debloat the partition images. Tool suggests where you can find the partition images. Mount them and delete stuff then do:
+
+```
+sh pay2sup.sh [optional parameters] -c
+```
+
+# To get this tool
 ```
 git clone https://github.com/elfametesar/Payload2Super
 cd Payload2Super
