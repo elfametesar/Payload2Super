@@ -202,7 +202,7 @@ get_read_write_state() {
 			export READ_ONLY=1
 			return 1
 		elif tune2fs -l $img | grep -i -q shared_blocks; then
-			echo -e "Program cannot resize partitions because they are read-only\n"
+			[[ $GRANT_RW == 0 ]] && echo -e "Program cannot resize partitions because they are read-only\n"
 			export READ_ONLY=1
 			return 1
 		else
