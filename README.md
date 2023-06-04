@@ -45,7 +45,7 @@ sh pay2sup.sh [optional parameters] -c
 
 # To get this tool
 ```
-git clone https://github.com/elfametesar/Payload2Super
+git clone https://github.com/elfametesar/Payload2Super -b experimental
 cd Payload2Super
 ```
 # Example Usage
