@@ -42,6 +42,7 @@ This happens more often because the ROM you're converting is EROFS and while con
 ```
 sh pay2sup.sh [optional parameters] -c
 ```
+If you wish to go back to EROFS to make partition images fit the super block, you can do that too. The tool will ask you during runtime.
 
 # To get this tool
 ```
