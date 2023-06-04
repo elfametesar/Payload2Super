@@ -1,0 +1,29 @@
+#!/sbin/sh
+
+OUTFD=/proc/self/fd/$2
+ZIPFILE="$3"
+export RECOVERY=$(getprop sys.boot_completed)
+TMPDIR=/data/local/tmp
+
+outfd() {
+  while read line; do
+    if [[ -z $RECOVERY ]]; then 
+    	echo "ui_print $line" >> $OUTFD
+    else 
+    	echo "$line"
+    fi
+  done 
+}
+
+cleanup() {
+	rm -rf META-INF flashable tmp tmp2 pay2sup.sh pay2sup_helper.sh erofs_to_ext4.sh
+}
+
+unzip "$ZIPFILE" -o -d $TMPDIR
+cd $TMPDIR
+bash pay2sup.sh --recovery | outfd
+cleanup || true
+if [[ -z $RECOVERY ]]; then
+	avbctl --force disable-verification
+	avbctl --force disable-verity
+fi
