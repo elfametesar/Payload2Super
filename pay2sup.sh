@@ -441,7 +441,7 @@ for _ in "$@"; do
 		"-h"|"--help")
 			help_me 
 			exit;;
-		*.zip|*.bin|.img)
+		*.zip|*.bin|.img|/dev/block/by-name/super)
 			main "$(realpath $1 2> /dev/null)"
 			exit;;
 		"-c"|"--continue")
