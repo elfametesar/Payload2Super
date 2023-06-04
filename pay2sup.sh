@@ -443,9 +443,6 @@ for _ in "$@"; do
 		"-h"|"--help")
 			help_me 
 			exit;;
-		*)
-			main "$(realpath $1 2> /dev/null)"
-			exit;;
 		"-c"|"--continue")
 			[[ -f $LOG_FILE ]] && rm $LOG_FILE
 			if [[ ! -d $HOME/extracted ]] || ! ls $HOME/extracted | grep -q ".img"; then
@@ -455,6 +452,9 @@ for _ in "$@"; do
 			cd $HOME/extracted
 			export CONTINUE=1
 			main;;
+		*)
+			main "$(realpath $1 2> /dev/null)"
+			exit;;
 		"")
 			help_me
 			echo "You need to enter the necessary parameters"
