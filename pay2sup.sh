@@ -152,9 +152,9 @@ super_extract() {
 	fi
 	{ file $ROM | grep -q -i "archive"; } && {
 		echo -e "Extracting super from archive (This takes a while)\n"
-		super_path="$(7z l $SUPER | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
-		7z e $SUPER "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
-		7z e $SUPER "${super_path}" -o$HOME 1> /dev/null
+		super_path="$(7z l $ROM | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
+		7z e $ROM "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
+		7z e $ROM "${super_path}" -o$HOME 1> /dev/null
 		if [[ ${super_path##*/} == *.gz ]]; then
 			pigz -d ${super_path##*/}
 		else
@@ -373,10 +373,12 @@ main() {
 			*.bin) payload_extract 2>> $LOG_FILE;;
 			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
 			*)
-				if 7z l $ROM | grep -q "*super.img*"; then
+				if 7z l $ROM | grep -E -q "*super.img*" 2> /dev/null; then
 					super_extract 2>> $LOG_FILE
 				elif 7z l $ROM payload.bin &> /dev/null; then
 					payload_extract 2>> $LOG_FILE
+				elif [[ -b $ROM ]]; then
+					super_extract 2>> $LOG_FILE
 				else
 					echo "ROM is not supported"
 					exit
@@ -441,7 +443,7 @@ for _ in "$@"; do
 		"-h"|"--help")
 			help_me 
 			exit;;
-		*.zip|*.bin|.img|/dev/block/by-name/super)
+		*)
 			main "$(realpath $1 2> /dev/null)"
 			exit;;
 		"-c"|"--continue")
@@ -457,7 +459,7 @@ for _ in "$@"; do
 			help_me
 			echo "You need to enter the necessary parameters"
 			exit;;
-		*)
+		-*)
 			help_me
 			echo "$1 is not a valid command"
 			exit;;
