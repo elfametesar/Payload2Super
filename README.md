@@ -1,25 +1,23 @@
 # Payload2Super
 
 ```
-OPTION 1: pay2sup.sh [-rw|--read-write] [-r|--resize] payload.bin|rom.zip
-OPTION 2: pay2sup.sh [-rw|--read-write] [-r|--resize] --remake super.zip|.img or /path/to/superblock
-OPTION 3: pay2sup.sh [-rw|--read-write] [-r|--resize] [-c|--continue]
+OPTION 1: pay2sup.sh [-rw|--read-write] [-r|--resize] payload.bin|super.img|rom.zip|/dev/block/by-name/super
+OPTION 2: pay2sup.sh [-rw|--read-write] [-r|--resize] [-c|--continue]
 
--rw  | --read-write          = Grants write access to all the partitions.
+-rw | --read-write           = Grants write access to all the partitions.
 
--r   | --resize	             = Resizes partitions based on user input. User input will be asked during the program.
+-r  | --resize	             = Resizes partitions based on user input. User input will be asked during the program.
 
 -dfe | --disable-encryption  = Disables Android's file encryption. This parameter requires read&write partitions.
 
--t   | --thread	             = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
+-t  | --thread	             = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
 
--c   | --continue            = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
+-c  | --continue             = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
 
--s   | --remake	             = Additional feature to repack super flashable images. It can also extract super from /dev/block/by-name/super on Android.
+-h  | --help	             = Prints out this help message.
 
--h   | --help                = Prints out this help message.
+Note that --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use payload.zip|.bin and --continue flags mixed with together. They are mutually exclusive.
 
-Note that --remake, --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use --remake <super_flashable.zip> and payload.zip|.bin or --continue flags mixed with together. They are mutually exclusive.
 ```
 
 This tool has only been tested on POCO F3 device, and ~~is compatible with devices that have the same type of super partition scheme.~~ This tool is aimed to support multiple devices, however it requires testers, which I have none. You are free to test it on your device and give feedbacks.
