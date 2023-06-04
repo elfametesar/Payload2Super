@@ -368,14 +368,14 @@ main() {
 	get_os_type 2>> $LOG_FILE
 	toolchain_check 2>> $LOG_FILE
 	[[ -z $CONTINUE ]] && {
-		[[ -z $ROM || ! -f $ROM || -b $ROM ]] && { echo "You need to specify a valid ROM file or super block first"; exit 1; }
+		[[ -z $ROM || ! -f $ROM || ! -b $ROM ]] || { echo "You need to specify a valid ROM file or super block first"; exit 1; }
 		case $ROM in
 			*.bin) payload_extract 2>> $LOG_FILE;;
 			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
 			*)
-				if 7z l $ROM | grep -E -q "*super.img*" 2> /dev/null; then
+				if 7z l $ROM | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
 					super_extract 2>> $LOG_FILE
-				elif 7z l $ROM payload.bin &> /dev/null; then
+				elif 7z l $ROM | grep -q payload.bin &> /dev/null; then
 					payload_extract 2>> $LOG_FILE
 				elif [[ -b $ROM ]]; then
 					super_extract 2>> $LOG_FILE
