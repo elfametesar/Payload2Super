@@ -76,7 +76,7 @@ get_partitions() {
 	else
 		loop=$(losetup -f)
 		losetup $loop $vendor 
-		mount $loop $TEMP
+		mount -o ro $loop $TEMP
 	fi
 	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	for fstab in $TEMP/etc/fstab*; do
@@ -152,9 +152,9 @@ super_extract() {
 	fi
 	{ file $ROM | grep -q -i "archive"; } && {
 		echo -e "Extracting super from archive (This takes a while)\n"
-		super_path="$(7z l $ROM | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
-		7z e $ROM "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
-		7z e $ROM "${super_path}" -o$HOME 1> /dev/null
+		super_path="$(7z l $SUPER | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
+		7z e $SUPER "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
+		7z e $SUPER "${super_path}" -o$HOME 1> /dev/null
 		if [[ ${super_path##*/} == *.gz ]]; then
 			pigz -d ${super_path##*/}
 		else
@@ -189,8 +189,8 @@ read_write() {
 			sh $HOME/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
 			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
 		else
-			if ! tune2fs -l $img &> /dev/null | grep -i -q shared_blocks; then
-				[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
+			if ! tune2fs -l $img | grep -i -q shared_blocks; then
+				[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe && sh $HOME/pay2sup_helper.sh remove_overlay
 				continue
 			fi
 			echo -e "Making ${img%.img} partition read&write\n"
@@ -205,11 +205,6 @@ read_write() {
 }
 
 get_super_size() {
-	[[ $RECOVERY == 1 ]] && {
-		blockdev --getsize64 /dev/block/by-name/super
-		SLOT=$(getprop ro.boot.slot_suffix)
-		return
-	}
 	echo -en "Enter the size of your super block, you can obtain it by:\n\nblockdev --getsize64 /dev/block/by-name/super\n\nIf you don't want to enter it manually, only press enter and the program will detect it automatically from your device: "
 	read super_size
 	echo
@@ -281,8 +276,7 @@ resize() {
 		fi
 		clear
 		echo -e "PARTITION SIZES\n"
-		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 )
-	        [[ $? == 1 ]] && { erofs_conversion; return; }
+		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) || { erofs_conversion; return; }
 		echo -n "Enter the amount of space you wish to give for ${img%.img} (MB): "
 		read add_size
 		echo
@@ -294,17 +288,14 @@ resize() {
 pack() {
 	[[ $BACK_TO_EROFS == 0 && $DFE == 1 && $READ_ONLY == 1 ]] && \
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
-	if [[ $RESIZE == 0 && $RECOVERY == 0 ]]; then
-		sh $HOME/pay2sup_helper.sh get $super_size 1> /dev/null 
-		[[ $? == 1 ]] && erofs_conversion
+	if [[ $RESIZE == 0 ]]; then
+		sh $HOME/pay2sup_helper.sh get $super_size 1> /dev/null || erofs_conversion
 		EROFS=1
 	fi
-	[[ $RECOVERY == 0 ]] && {
-		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
-		read
-		echo
-	}
-	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 && $RECOVERY == 0 ]]; then
+	echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
+	read
+	echo
+	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 ]]; then
 		echo -en "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
 		echo
@@ -319,7 +310,7 @@ pack() {
 			mv $img $HOME/flashable/firmware-update
 		fi
 	done
-	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts $SPARSE --output $HOME/flashable/super.img"
+	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts --output $HOME/flashable/super.img"
 	echo -e "Packaging super image\n"
 	lpmake $lp_args 1> /dev/null || { echo "Something went wrong with super.img creation, exiting"; exit 1; } 
 
@@ -371,54 +362,21 @@ project_structure() {
 		tmp
 }
 
-recovery_resize() {
-	for img in $PARTS; do
-		clear
-		echo -e "PARTITION SIZES\n"
-		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
-		space=$?
-		[[ $space == 1 ]] && {
-			echo "Partitions exceed the super block size, cannot continue"
-			exit 1
-	       	}
-		add_size=$( calc $space/$(wc -w <<< "$PARTS") )
-		sh $HOME/pay2sup_helper.sh expand $img ${add_size:-0} 1> /dev/null
-	done
-}
-
-recovery() {
-	ROM=/dev/block/by-name/super
-	SPARSE="--sparse"
-	project_structure
-	get_os_type
-	super_extract 2> $LOG_FILE
-	get_super_size 2>> $LOG_FILE
-	get_partitions 2>> $LOG_FILE
-	read_write 2>> $LOG_FILE
-	recovery_resize 2>> $LOG_FILE
-	pack 2>> $LOG_FILE
-	echo "Flashing super image..."
-	simg2img $HOME/flashable/super.img /dev/block/by-name/super
-	cleanup
-}
-
 main() {
 	ROM=$1
 	project_structure
 	get_os_type 2>> $LOG_FILE
 	toolchain_check 2>> $LOG_FILE
 	[[ -z $CONTINUE ]] && {
-		[[ -z $ROM || ! -f $ROM || ! -b $ROM ]] || { echo "You need to specify a valid ROM file or super block first"; exit 1; }
+		[[ -z $ROM || ! -f $ROM || -b $ROM ]] && { echo "You need to specify a valid ROM file or super block first"; exit 1; }
 		case $ROM in
 			*.bin) payload_extract 2>> $LOG_FILE;;
 			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
 			*)
-				if 7z l $ROM | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
+				if 7z l $ROM | grep -q "*super.img*"; then
 					super_extract 2>> $LOG_FILE
-				elif 7z l $ROM | grep -q payload.bin &> /dev/null; then
+				elif 7z l $ROM payload.bin &> /dev/null; then
 					payload_extract 2>> $LOG_FILE
-				elif [[ -b $ROM ]]; then
-					super_extract 2>> $LOG_FILE
 				else
 					echo "ROM is not supported"
 					exit
@@ -463,11 +421,6 @@ Note that --continue or payload.zip|.bin flag has to come after all other flags 
 
 for _ in "$@"; do
 	case $1 in
-		"--recovery")
-			export RECOVERY=1
-			recovery
-			exit;;
-
 		"-rw"| "--read-write")
 			export GRANT_RW=1
 			shift
@@ -488,6 +441,9 @@ for _ in "$@"; do
 		"-h"|"--help")
 			help_me 
 			exit;;
+		*.zip|*.bin|.img)
+			main "$(realpath $1 2> /dev/null)"
+			exit;;
 		"-c"|"--continue")
 			[[ -f $LOG_FILE ]] && rm $LOG_FILE
 			if [[ ! -d $HOME/extracted ]] || ! ls $HOME/extracted | grep -q ".img"; then
@@ -497,14 +453,11 @@ for _ in "$@"; do
 			cd $HOME/extracted
 			export CONTINUE=1
 			main;;
-		*)
-			main "$(realpath $1 2> /dev/null)"
-			exit;;
 		"")
 			help_me
 			echo "You need to enter the necessary parameters"
 			exit;;
-		-*)
+		*)
 			help_me
 			echo "$1 is not a valid command"
 			exit;;
