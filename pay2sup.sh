@@ -206,7 +206,7 @@ read_write() {
 
 get_super_size() {
 	[[ $RECOVERY == 1 ]] && {
-		blockdev --getsize64 /dev/block/by-name/super
+		super_size=$(blockdev --getsize64 /dev/block/by-name/super)
 		SLOT=$(getprop ro.boot.slot_suffix)
 		return
 	}
@@ -372,9 +372,9 @@ project_structure() {
 }
 
 recovery_resize() {
+	shrink_before_resize 
 	for img in $PARTS; do
 		clear
-		echo -e "PARTITION SIZES\n"
 		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
 		space=$?
 		[[ $space == 1 ]] && {
@@ -388,7 +388,9 @@ recovery_resize() {
 
 recovery() {
 	ROM=/dev/block/by-name/super
+	DFE=1
 	SPARSE="--sparse"
+	chmod +x -R $HOME/bin
 	project_structure
 	get_os_type
 	super_extract 2> $LOG_FILE
@@ -397,8 +399,13 @@ recovery() {
 	read_write 2>> $LOG_FILE
 	recovery_resize 2>> $LOG_FILE
 	pack 2>> $LOG_FILE
-	echo "Flashing super image..."
-	simg2img $HOME/flashable/super.img /dev/block/by-name/super
+	if [[ -z $RECOVERY ]]; then
+		echo "Moving super image to $OUT, you can flash it in recovery from there"
+		mv $HOME/flashable/super.img $OUT
+	else
+		echo "Flashing super image..."
+		simg2img $HOME/flashable/super.img /dev/block/by-name/super
+	fi
 	cleanup
 }
 
