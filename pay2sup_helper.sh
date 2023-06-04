@@ -33,8 +33,9 @@ get_sizes() {
 		echo -e "${img%.img/}\t${size}M"
 		sum=$( calc $sum+$size )
 	done
+	echo -e "\nSuper block size is ${super_size}M.\n"
 	if (( super_size-sum < 0 )); then
-		echo -e "\nPartition sizes exceed the super block size. Program cannot continue. You need to debloat the images you can find in $PWD in order to continue."
+		echo -e "\nPartition sizes exceed the super block size. Program cannot continue. You need to debloat the images you can find in $PWD or convert back to EROFS in order to continue.\n"
 		exit 1
 	fi
 	echo

@@ -11,6 +11,7 @@ export READ_ONLY=0
 export EROFS=0
 export DFE=0
 export TEMP=$HOME/tmp
+export BACK_TO_EROFS=0
 
 trap "exit" INT
 trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
@@ -22,7 +23,8 @@ trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null
 }
 
 TOOLCHAIN=(make_ext4fs \
-	busybox
+	mkfs.erofs \
+	busybox \
 	pigz \
 	7z \
 	dump.erofs \
@@ -125,6 +127,24 @@ grant_rw(){
 	}
 }
 
+erofs_conversion() {
+	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
+	read choice
+	echo
+	[[ $choice == "n" ]] && return
+	for img in $PARTS; do
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount $loop $TEMP || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
+		echo -e "Converting ${img%*.img} to EROFS\n"
+		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img $TEMP 1> /dev/null
+		{ umount $TEMP || umount -l $TEMP && losetup -D; } &> /dev/null
+		mv ${img%*.img}_erofs.img $img
+	done
+	BACK_TO_EROFS=1
+}
+
+
 super_extract() {
 	if [[ -b $SUPER && $LINUX == 1 ]]; then
 		   echo "Extracting from block devices is Android-only feature"
@@ -196,7 +216,7 @@ read_write() {
 }
 
 get_super_size() {
-	echo -n "Enter the size of your super block, you can obtain it by 'blockdev --getsize64 /dev/block/by-name/super'. If you don't want to enter it manually, only press enter and the program will detect it automatically from your device: "
+	echo -en "Enter the size of your super block, you can obtain it by:\n\nblockdev --getsize64 /dev/block/by-name/super\n\nIf you don't want to enter it manually, only press enter and the program will detect it automatically from your device: "
 	read super_size
 	echo
 	if (( ${super_size:-"0"} > 1 )); then
@@ -267,7 +287,7 @@ resize() {
 		fi
 		clear
 		echo -e "PARTITION SIZES\n"
-		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) || exit $?
+		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) || { erofs_conversion; return; }
 		echo -n "Enter the amount of space you wish to give for ${img%.img} (MB): "
 		read add_size
 		echo
@@ -277,12 +297,16 @@ resize() {
 }
 
 pack() {
-	[[ $DFE == 1 && $READ_ONLY == 1 ]] && \
+	[[ $BACK_TO_EROFS == 0 && $DFE == 1 && $READ_ONLY == 1 ]] && \
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
+	if [[ $RESIZE == 0 ]]; then
+		sh $HOME/pay2sup_helper.sh get $super_size || erofs_conversion
+		EROFS=1
+	fi
 	echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
 	read
 	echo
-	if [[ $RESIZE == 0 && $READ_ONLY == 0 ]]; then
+	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 ]]; then
 		echo -en "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
 		echo
