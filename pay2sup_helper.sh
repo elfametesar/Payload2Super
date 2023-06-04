@@ -41,16 +41,17 @@ get_sizes() {
 	echo
 	echo "Free space you can distribute is $( calc $super_size-$sum )Mb"
 	echo
+	return $( calc $super_size-$sum )
 }
 
 add_space() {
 	if [[ $PARTS == *$1* ]]; then
-			bytes=$(stat -c%s $1)
-			megabytes=$( calc $bytes/1024/1024 )
-			total=$( calc $megabytes+$2 )
-			echo "Size of the $1 was ${megabytes}Mb"
-			fallocate -l "${total}M" $1 && echo -e "New size of the ${1%.img} is $( calc $(stat -c%s $1)/1024/1024 )Mb\n" || echo "Something went wrong"
-			resize2fs -f $1 1> /dev/null
+		bytes=$(stat -c%s $1)
+		megabytes=$( calc $bytes/1024/1024 )
+		total=$( calc $megabytes+$2 )
+		echo "Size of the $1 was ${megabytes}Mb"
+		fallocate -l "${total}M" $1 && echo -e "New size of the ${1%.img} is $( calc $(stat -c%s $1)/1024/1024 )Mb\n" || echo "Something went wrong"
+		resize2fs -f $1 1> /dev/null
 	fi
 }
 
