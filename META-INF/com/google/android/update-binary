@@ -21,7 +21,7 @@ cleanup() {
 
 unzip "$ZIPFILE" -o -d $TMPDIR
 cd $TMPDIR
-bash pay2sup.sh --recovery | outfd
+$(which sh) pay2sup.sh --recovery | outfd
 cleanup || true
 if [[ -z $RECOVERY ]]; then
 	avbctl --force disable-verification
