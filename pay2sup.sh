@@ -398,9 +398,8 @@ main() {
 
 help_me() {
 	echo "
-OPTION 1: $0 [-rw|--read-write] [-r|--resize] payload.bin|rom.zip
-OPTION 2: $0 [-rw|--read-write] [-r|--resize] --remake super.zip|.img or /path/to/superblock
-OPTION 3: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
+OPTION 1: $0 [-rw|--read-write] [-r|--resize] payload.bin|super.img|rom.zip|/dev/block/by-name/super
+OPTION 2: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
 
 -rw | --read-write          = Grants write access to all the partitions.
 
@@ -412,16 +411,12 @@ OPTION 3: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
 
 -c  | --continue            = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
 
--s  | --remake	            = Additional feature to repack super flashable images. It can also extract super from /dev/block/by-name/super on Android.
-
 -h  | --help	            = Prints out this help message.
 
-Note that --remake, --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use --remake <super_flashable.zip> and payload.zip|.bin or --continue flags mixed with together. They are mutually exclusive.
+Note that --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use payload.zip|.bin and --continue flags mixed with together. They are mutually exclusive.
 "
 }
-[[ -z $@ ]] && echo "OPTION 1: $0 [-rw|--read-write] [-r|--resize] payload.bin|rom.zip
-OPTION 2: $0 [-rw|--read-write] [-r|--resize] --remake super.zip|.img or /path/to/superblock
-OPTION 3: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]" && exit
+[[ -z $@ ]] && help_me | head -n4 && exit
 
 
 for _ in "$@"; do
