@@ -12,7 +12,7 @@ shrink() {
         	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
 		umount $TEMP || umount -l $TEMP
 		losetup -D
-		[[ $space_size == 0 ]] && return
+		[[ $space_size == 0 ]] && continue
 		shrink_space=$(calc $total_size-$space_size)
 		shrink_space=$(calc $shrink_space/1024/1024)
 		resize2fs -f $img ${shrink_space}M || while true; do
@@ -41,17 +41,16 @@ get_sizes() {
 	echo
 	echo "Free space you can distribute is $( calc $super_size-$sum )Mb"
 	echo
-	return $( calc $super_size-$sum )
 }
 
 add_space() {
 	if [[ $PARTS == *$1* ]]; then
-		bytes=$(stat -c%s $1)
-		megabytes=$( calc $bytes/1024/1024 )
-		total=$( calc $megabytes+$2 )
-		echo "Size of the $1 was ${megabytes}Mb"
-		fallocate -l "${total}M" $1 && echo -e "New size of the ${1%.img} is $( calc $(stat -c%s $1)/1024/1024 )Mb\n" || echo "Something went wrong"
-		resize2fs -f $1 1> /dev/null
+			bytes=$(stat -c%s $1)
+			megabytes=$( calc $bytes/1024/1024 )
+			total=$( calc $megabytes+$2 )
+			echo "Size of the $1 was ${megabytes}Mb"
+			fallocate -l "${total}M" $1 && echo -e "New size of the ${1%.img} is $( calc $(stat -c%s $1)/1024/1024 )Mb\n" || echo "Something went wrong"
+			resize2fs -f $1 1> /dev/null
 	fi
 }
 
