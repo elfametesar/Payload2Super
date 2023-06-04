@@ -72,7 +72,7 @@ get_os_type() {
 get_partitions() {
 	vendor=$HOME/extracted/vendor.img
 	if dump.erofs $vendor &> /dev/null; then
-		fuse.erofs $vendor $TEMP
+		fuse.erofs $vendor $TEMP 1> /dev/null
 	else
 		loop=$(losetup -f)
 		losetup $loop $vendor 
@@ -146,29 +146,24 @@ erofs_conversion() {
 
 
 super_extract() {
-	if [[ -b $SUPER && $LINUX == 1 ]]; then
+	if [[ -b $ROM && $LINUX == 1 ]]; then
 		   echo "Extracting from block devices is Android-only feature"
 		   exit 1
 	fi
-	{ file $SUPER | grep -q -i "archive"; } && {
-		if 7z l $SUPER | grep -q "super.img"; then
-			echo -e "Extracting super from archive (This takes a while)\n"
-			super_path="$(7z l $SUPER | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
-			7z e $SUPER "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
-			7z e $SUPER "${super_path}" -o$HOME 1> /dev/null
-			if [[ ${super_path##*/} == *.gz ]]; then
-				pigz -d ${super_path##*/}
-			else
-				7z e "${super_path##*/}" &> /dev/null && rm "${super_path##*/}"
-			fi
-			SUPER=super.img
+	{ file $ROM | grep -q -i "archive"; } && {
+		echo -e "Extracting super from archive (This takes a while)\n"
+		super_path="$(7z l $SUPER | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
+		7z e $SUPER "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
+		7z e $SUPER "${super_path}" -o$HOME 1> /dev/null
+		if [[ ${super_path##*/} == *.gz ]]; then
+			pigz -d ${super_path##*/}
 		else
-			   echo "This archive does not contain a super image"
-			   exit 1
+			7z e "${super_path##*/}" &> /dev/null && rm "${super_path##*/}"
 		fi
+		ROM=super.img
 	}
 	echo -e "Unpacking super\n"
-	lpunpack $SUPER extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
+	lpunpack $ROM extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 	rm $HOME/super* &> /dev/null
 	cd extracted
 	for img in *.img; do
@@ -179,15 +174,9 @@ super_extract() {
 	done
 }
 
-extract() {
-	[[ $PAYLOAD == *.zip ]] && {
-		7z l $PAYLOAD payload.bin | grep -q payload.bin || {
-			echo "No payload file found in this archive. Make sure you have a valid flashable file"
-			exit 1
-		}
-	}
+payload_extract() {
 	echo -e "Extracting images from payload (This takes a while)\n"
-	payload-dumper -c ${CPU:-1} -o extracted $PAYLOAD 1> /dev/null || { echo "Program cannot extract payload"; exit 1; }
+	payload-dumper -c ${CPU:-1} -o extracted $ROM 1> /dev/null || { echo "Program cannot extract payload"; exit 1; }
 	cd extracted
 }
 
@@ -300,7 +289,7 @@ pack() {
 	[[ $BACK_TO_EROFS == 0 && $DFE == 1 && $READ_ONLY == 1 ]] && \
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
 	if [[ $RESIZE == 0 ]]; then
-		sh $HOME/pay2sup_helper.sh get $super_size || erofs_conversion
+		sh $HOME/pay2sup_helper.sh get $super_size 1> /dev/null || erofs_conversion
 		EROFS=1
 	fi
 	echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
@@ -373,12 +362,28 @@ project_structure() {
 		tmp
 }
 
-main_super() {
-	[[ -z $SUPER ]] && echo "Specify a valid super flashable or super device" && exit 1
+main() {
+	ROM=$1
 	project_structure
-	get_os_type 2> $LOG_FILE
+	get_os_type 2>> $LOG_FILE
 	toolchain_check 2>> $LOG_FILE
-	super_extract 2>> $LOG_FILE
+	[[ -z $CONTINUE ]] && {
+		[[ -z $ROM || ! -f $ROM || -b $ROM ]] && { echo "You need to specify a valid ROM file or super block first"; exit 1; }
+		case $ROM in
+			*.bin) payload_extract 2>> $LOG_FILE;;
+			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
+			*)
+				if 7z l $ROM | grep -q "*super.img*"; then
+					super_extract 2>> $LOG_FILE
+				elif 7z l $ROM payload.bin &> /dev/null; then
+					payload_extract 2>> $LOG_FILE
+				else
+					echo "ROM is not supported"
+					exit
+				fi
+				;;
+		esac
+	}
 	get_super_size 2>> $LOG_FILE
 	get_partitions 2>> $LOG_FILE
 	get_read_write_state
@@ -389,24 +394,6 @@ main_super() {
 	flashable_package 2>> $LOG_FILE
 	cleanup
 	exit
-}
-
-
-main_payload () {
-	[[ -z $PAYLOAD || ! -f $PAYLOAD ]] && { echo "You need to specify a valid rom or payload file first"; exit 1; }
-	project_structure
-	get_os_type 2> $LOG_FILE
-	toolchain_check 2> $LOG_FILE
-	extract 2>> $LOG_FILE 
-	get_super_size 2>> $LOG_FILE
-	get_partitions 2>> $LOG_FILE
-	get_read_write_state
-	[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
-	[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
-	get_read_write_state
-	pack 2>> $LOG_FILE
-	flashable_package 2>> $LOG_FILE
-	cleanup
 }
 
 help_me() {
@@ -459,14 +446,8 @@ for _ in "$@"; do
 		"-h"|"--help")
 			help_me 
 			exit;;
-		*.zip|*.bin)
-			export PAYLOAD="$(realpath $1 2> /dev/null)"
-			main_payload
-			exit;;
-		"-s"|"--remake")
-			shift
-			export SUPER="$(realpath $1 2> /dev/null)"
-			main_super
+		*.zip|*.bin|.img)
+			main "$(realpath $1 2> /dev/null)"
 			exit;;
 		"-c"|"--continue")
 			[[ -f $LOG_FILE ]] && rm $LOG_FILE
@@ -475,18 +456,8 @@ for _ in "$@"; do
 				exit 1
 			fi
 			cd $HOME/extracted
-			get_os_type 2>> $LOG_FILE
-			toolchain_check 2>> $LOG_FILE
-			get_super_size 2>> $LOG_FILE
-			get_partitions 2>> $LOG_FILE
-			get_read_write_state
-			[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
-			[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
-			get_read_write_state
-			pack 2>> $LOG_FILE
-			flashable_package 2>> $LOG_FILE
-			cleanup
-			exit;;
+			export CONTINUE=1
+			main;;
 		"")
 			help_me
 			echo "You need to enter the necessary parameters"
