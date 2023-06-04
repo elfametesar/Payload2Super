@@ -11,17 +11,20 @@ export READ_ONLY=0
 export EROFS=0
 export DFE=0
 export TEMP=$HOME/tmp
+export BACK_TO_EROFS=0
 
 trap "exit" INT
+trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+
 
 [[ $(id -u) != 0 ]] && {
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
 	exit
 }
 
-
 TOOLCHAIN=(make_ext4fs \
-	busybox
+	mkfs.erofs \
+	busybox \
 	pigz \
 	7z \
 	dump.erofs \
@@ -39,7 +42,7 @@ toolchain_check() {
 		if [[ -f $HOME/bin/$tool ]]; then
 			continue
 		else
-			[[ $tool == adb || $tool == fuse.erofs && $LINUX == 0 ]] && continue
+			[[ $tool == adb && $LINUX == 0 ]] && continue
 			[[ $tool == make_ext4fs || $tool == busybox && $LINUX == 1 ]] && continue
 			missing+=($tool)
 		fi
@@ -64,6 +67,29 @@ get_os_type() {
 			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
 			export BUSYBOX=busybox;;
 	esac
+}
+
+get_partitions() {
+	vendor=$HOME/extracted/vendor.img
+	if dump.erofs $vendor &> /dev/null; then
+		fuse.erofs $vendor $TEMP
+	else
+		loop=$(losetup -f)
+		losetup $loop $vendor 
+		mount $loop $TEMP
+	fi
+	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
+	for fstab in $TEMP/etc/fstab*; do
+		FSTABS+=$(cat $fstab)
+	done
+	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" || $2 != "/metadata" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
+	PART_LIST=${PART_LIST//\//}
+	PART_LIST=$(awk '{ print $1".img" }' <<< "$PART_LIST")
+	for img in $HOME/extracted/*.img; do
+		[[ $PART_LIST == *${img##*/}* ]] && export PARTS+="${img##*/} "
+	done
+	umount $TEMP || umount -l $TEMP
+	losetup -D
 }
 
 toolchain_download() {
@@ -101,6 +127,24 @@ grant_rw(){
 	}
 }
 
+erofs_conversion() {
+	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
+	read choice
+	echo
+	[[ $choice == "n" ]] && return
+	for img in $PARTS; do
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount $loop $TEMP || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
+		echo -e "Converting ${img%*.img} to EROFS\n"
+		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img $TEMP 1> /dev/null
+		{ umount $TEMP || umount -l $TEMP && losetup -D; } &> /dev/null
+		mv ${img%*.img}_erofs.img $img
+	done
+	BACK_TO_EROFS=1
+}
+
+
 super_extract() {
 	if [[ -b $SUPER && $LINUX == 1 ]]; then
 		   echo "Extracting from block devices is Android-only feature"
@@ -114,7 +158,7 @@ super_extract() {
 			7z e $SUPER "${super_path}" -o$HOME 1> /dev/null
 			if [[ ${super_path##*/} == *.gz ]]; then
 				pigz -d ${super_path##*/}
-				else
+			else
 				7z e "${super_path##*/}" &> /dev/null && rm "${super_path##*/}"
 			fi
 			SUPER=super.img
@@ -129,7 +173,9 @@ super_extract() {
 	cd extracted
 	for img in *.img; do
 		[[ -s $img ]] || { rm $img; continue; }
-		mv $img ${img%_*}.img
+		if [[ $img == *_a.img || $img == *_b.img ]]; then
+			mv $img ${img%_*}.img
+		fi
 	done
 }
 
@@ -147,62 +193,73 @@ extract() {
 
 read_write() {
 	echo -e "Readying images for super packing process\n"
-	for img in system.img system_ext.img product.img vendor.img odm.img; do
+	for img in $PARTS; do
 		if dump.erofs $img 1> /dev/null; then 
 			[[ $LINUX == 1 && ! -d /etc/selinux ]] && echo -e "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only...\n" && sleep 2 && export READ_ONLY=1 && return 1
 			echo -e "Converting EROFS ${img%.img} image to ext4\n"
 			sh $HOME/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
 			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
 		else
-			if ! tune2fs -l $img | grep -i -q shared_blocks; then
+			if ! tune2fs -l $img &> /dev/null | grep -i -q shared_blocks; then
 				[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
 				continue
 			fi
 			echo -e "Making ${img%.img} partition read&write\n"
 			grant_rw $img 1> /dev/null
-			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
+			if [[ $img == vendor.img ]]; then
+				[[ $DFE == 1 ]] && sh $HOME/pay2sup_helper.sh dfe
+				sh $HOME/pay2sup_helper.sh remove_overlay
+			fi
 		fi
 	done
 	export READ_ONLY=0
 }
 
 get_super_size() {
+	echo -en "Enter the size of your super block, you can obtain it by:\n\nblockdev --getsize64 /dev/block/by-name/super\n\nIf you don't want to enter it manually, only press enter and the program will detect it automatically from your device: "
+	read super_size
+	echo
+	if (( ${super_size:-"0"} > 1 )); then
+		echo -n "Enter the slot name you want to use, leave empty if your device is A-only: "
+		read SLOT
+		case $SLOT in
+			"a"|"_a") SLOT=_a; return;;
+			"b"|"_b") SLOT=_b; return;;
+		esac
+	fi
 	if [[ $LINUX == 0 ]]; then
 		super_size=$(blockdev --getsize64 /dev/block/by-name/super)
+		SLOT=$(getprop ro.boot.slot_suffix)
 	else
 		echo -e "Program requires connecting to your device through ADB and your device needs to be rooted or in recovery. It will wait until your device is connected. Please connect your device. If you connected it to your PC, press enter. If you wish to exit the program, press CTRL + c\n"
 		read
 		while true; do
 			if adb get-state | grep -q "device"; then
-				super_size=$(adb shell su -c blockdev --getsize64 /dev/block/by-name/super) && break || { echo -e "Can't do this without root permission. Make sure shell is granted with root access in your root app.\n"; }
+				super_size=$(adb shell su -c blockdev --getsize64 /dev/block/by-name/super) || { echo -e "Can't do this without root permission. Make sure shell is granted with root access in your root app.\n"; }
 			elif adb get-state | grep -q "recovery"; then
-				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) && break || { echo "A problem occured while estimating your device super size in recovery state, exiting"; exit 1; }
+				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) || { echo "A problem occured while estimating your device super size in recovery state, exiting"; exit 1; }
 			else
 				echo -e "Cannot access the device, put it in recovery mode as a last resort and connect to your PC. Program will automatically continue.\n"
 				adb wait-for-any-recovery
-				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) && break || { echo "A problem occured while estimating your device super size, exiting"; exit 1; }
+				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) || { echo "A problem occured while estimating your device super size, exiting"; exit 1; }
 			fi
+			SLOT=$(adb shell su -c getprop ro.boot.slot_suffix) && break
 		done
 	fi
 }
 
 shrink_before_resize() {
 	echo -e "Shrinking partitions...\n"
-	sh $HOME/pay2sup_helper.sh shrink \
-	       system.img \
-	       system_ext.img \
-	       odm.img \
-	       product.img \
-	       vendor.img 1> /dev/null
+	sh $HOME/pay2sup_helper.sh shrink $PARTS 1> /dev/null
 }
 
 get_read_write_state() {
-	for img in system*.img vendor.img product.img; do
+	for img in $PARTS; do
 		if dump.erofs $img &> /dev/null; then
 			export EROFS=1
 			export READ_ONLY=1
 			return 1
-		elif tune2fs -l $img | grep -i -q shared_blocks; then
+		elif tune2fs -l $img &> /dev/null | grep -i -q shared_blocks; then
 			[[ $GRANT_RW == 0 ]] && echo -e "Program cannot resize partitions because they are read-only\n"
 			export READ_ONLY=1
 			return 1
@@ -219,7 +276,7 @@ resize() {
 	read shrink
 	echo
 	[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
-	for img in system*.img vendor.img odm.img product.img; do
+	for img in $PARTS; do
 		if dump.erofs $img &> /dev/null; then
 			if [[ $READ_ONLY == 0 ]]; then
 				echo -e "EROFS partitions cannot be resized unless they are converted to EXT4, switching on read&write mode\n"
@@ -230,7 +287,7 @@ resize() {
 		fi
 		clear
 		echo -e "PARTITION SIZES\n"
-		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) || exit $?
+		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) || { erofs_conversion; return; }
 		echo -n "Enter the amount of space you wish to give for ${img%.img} (MB): "
 		read add_size
 		echo
@@ -240,25 +297,29 @@ resize() {
 }
 
 pack() {
-	[[ $DFE == 1 && $READ_ONLY == 1 ]] && \
+	[[ $BACK_TO_EROFS == 0 && $DFE == 1 && $READ_ONLY == 1 ]] && \
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
+	if [[ $RESIZE == 0 ]]; then
+		sh $HOME/pay2sup_helper.sh get $super_size || erofs_conversion
+		EROFS=1
+	fi
 	echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
 	read
 	echo
-	if [[ $RESIZE == 0 && $READ_ONLY == 0 ]]; then
+	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 ]]; then
 		echo -en "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
 		echo
 		[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
 	fi 	
-	for img in *.img; do
-		case $img in system*|vendor.img|odm*|product*)
-			lp_part_name=${img%.img}_a
+	for img in $PARTS; do
+		if [[ $PARTS == *$img* ]]; then
+			lp_part_name=${img%.img}$SLOT
 			sum=$( calc $sum+$(stat -c%s $img) )
-			lp_parts+="--partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img ";;
-		*)
-			mv $img $HOME/flashable/firmware-update;;
-		esac
+			lp_parts+="--partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img "
+		else
+			mv $img $HOME/flashable/firmware-update
+		fi
 	done
 	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts --output $HOME/flashable/super.img"
 	echo -e "Packaging super image\n"
@@ -319,6 +380,7 @@ main_super() {
 	toolchain_check 2>> $LOG_FILE
 	super_extract 2>> $LOG_FILE
 	get_super_size 2>> $LOG_FILE
+	get_partitions 2>> $LOG_FILE
 	get_read_write_state
 	[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
 	[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
@@ -337,6 +399,7 @@ main_payload () {
 	toolchain_check 2> $LOG_FILE
 	extract 2>> $LOG_FILE 
 	get_super_size 2>> $LOG_FILE
+	get_partitions 2>> $LOG_FILE
 	get_read_write_state
 	[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
 	[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
@@ -415,6 +478,7 @@ for _ in "$@"; do
 			get_os_type 2>> $LOG_FILE
 			toolchain_check 2>> $LOG_FILE
 			get_super_size 2>> $LOG_FILE
+			get_partitions 2>> $LOG_FILE
 			get_read_write_state
 			[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
 			[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
