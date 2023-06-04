@@ -12,7 +12,7 @@ shrink() {
         	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
 		umount $TEMP || umount -l $TEMP
 		losetup -D
-		[[ $space_size == 0 ]] && return
+		[[ $space_size == 0 ]] && continue
 		shrink_space=$(calc $total_size-$space_size)
 		shrink_space=$(calc $shrink_space/1024/1024)
 		resize2fs -f $img ${shrink_space}M || while true; do

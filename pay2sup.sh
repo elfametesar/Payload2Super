@@ -76,7 +76,7 @@ get_partitions() {
 	else
 		loop=$(losetup -f)
 		losetup $loop $vendor 
-		mount $loop $TEMP
+		mount -o ro $loop $TEMP
 	fi
 	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	for fstab in $TEMP/etc/fstab*; do
@@ -189,8 +189,8 @@ read_write() {
 			sh $HOME/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
 			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
 		else
-			if ! tune2fs -l $img &> /dev/null | grep -i -q shared_blocks; then
-				[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
+			if ! tune2fs -l $img | grep -i -q shared_blocks; then
+				[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe && sh $HOME/pay2sup_helper.sh remove_overlay
 				continue
 			fi
 			echo -e "Making ${img%.img} partition read&write\n"
