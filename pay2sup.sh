@@ -233,14 +233,16 @@ get_super_size() {
 		while true; do
 			if adb get-state | grep -q "device"; then
 				super_size=$(adb shell su -c blockdev --getsize64 /dev/block/by-name/super) || { echo -e "Can't do this without root permission. Make sure shell is granted with root access in your root app.\n"; }
+				SLOT=$(adb shell su -c getprop ro.boot.slot_suffix) && break
 			elif adb get-state | grep -q "recovery"; then
 				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) || { echo "A problem occured while estimating your device super size in recovery state, exiting"; exit 1; }
+				SLOT=$(adb shell getprop ro.boot.slot_suffix) && break
 			else
 				echo -e "Cannot access the device, put it in recovery mode as a last resort and connect to your PC. Program will automatically continue.\n"
 				adb wait-for-any-recovery
 				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) || { echo "A problem occured while estimating your device super size, exiting"; exit 1; }
+				SLOT=$(adb shell getprop ro.boot.slot_suffix) && break
 			fi
-			SLOT=$(adb shell su -c getprop ro.boot.slot_suffix) && break
 		done
 	fi
 }
