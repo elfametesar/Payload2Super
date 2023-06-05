@@ -76,7 +76,7 @@ get_partitions() {
 	else
 		loop=$(losetup -f)
 		losetup $loop $vendor 
-		mount $loop $TEMP
+		mount -o ro $loop $TEMP
 	fi
 	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	for fstab in $TEMP/etc/fstab*; do
@@ -189,8 +189,11 @@ read_write() {
 			sh $HOME/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
 			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
 		else
-			if ! tune2fs -l $img &> /dev/null | grep -i -q shared_blocks; then
-				[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
+			if ! tune2fs -l $img | grep -i -q shared_blocks; then
+				[[ $img == vendor.img ]] && {
+				       	[[ $DFE == 1 ]] && sh $HOME/pay2sup_helper.sh dfe
+					sh $HOME/pay2sup_helper.sh remove_overlay
+				}
 				continue
 			fi
 			echo -e "Making ${img%.img} partition read&write\n"
@@ -415,14 +418,17 @@ main() {
 	get_os_type 2>> $LOG_FILE
 	toolchain_check 2>> $LOG_FILE
 	[[ -z $CONTINUE ]] && {
-		[[ -z $ROM || ! -f $ROM || ! -b $ROM ]] || { echo "You need to specify a valid ROM file or super block first"; exit 1; }
+		if [[ -z $ROM ]] || [[ ! -f $ROM ]] && [[ ! -b $ROM ]]; then 
+			echo "You need to specify a valid ROM file or super block first"
+		       	exit 1
+		fi
 		case $ROM in
 			*.bin) payload_extract 2>> $LOG_FILE;;
 			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
 			*)
-				if 7z l $ROM | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
+				if 7z l $ROM 2> /dev/null | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
 					super_extract 2>> $LOG_FILE
-				elif 7z l $ROM | grep -q payload.bin &> /dev/null; then
+				elif 7z l $ROM 2> /dev/null | grep -q payload.bin &> /dev/null; then
 					payload_extract 2>> $LOG_FILE
 				elif [[ -b $ROM ]]; then
 					super_extract 2>> $LOG_FILE
