@@ -41,7 +41,7 @@ get_sizes() {
 	echo
 	echo "Free space you can distribute is $( calc $super_size-$sum )Mb"
 	echo
-	return $( calc $super_size-$sum )
+	echo $( calc $super_size-$sum ) > empty_space
 }
 
 add_space() {
