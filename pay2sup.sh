@@ -12,6 +12,7 @@ export EROFS=0
 export DFE=0
 export TEMP=$HOME/tmp
 export BACK_TO_EROFS=0
+export RECOVERY=0
 
 trap "exit" INT
 trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
@@ -315,7 +316,7 @@ pack() {
 		echo
 		[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
 	fi 	
-	for img in $PARTS; do
+	for img in *.img; do
 		if [[ $PARTS == *$img* ]]; then
 			lp_part_name=${img%.img}$SLOT
 			sum=$( calc $sum+$(stat -c%s $img) )
@@ -352,7 +353,7 @@ package_extract_file() {
 ' > $updater_script
 	echo -e 'ui_print "Flashing repacked super rom"\n' >> $updater_script
 	for firmware in firmware-update/*; do
-		[[ $firmware == *.img ]] || break 
+		[[ $firmware == *.img ]] || continue 
 		part_name=${firmware##*/}
 		part_name=${part_name%.*}
 		echo -e "ui_print \"Updating $part_name...\"" >> $updater_script
@@ -416,7 +417,6 @@ recovery() {
 
 main() {
 	ROM=$1
-	project_structure
 	get_os_type 2>> $LOG_FILE
 	toolchain_check 2>> $LOG_FILE
 	[[ -z $CONTINUE ]] && {
@@ -424,6 +424,7 @@ main() {
 			echo "You need to specify a valid ROM file or super block first"
 		       	exit 1
 		fi
+		project_structure
 		case $ROM in
 			*.bin) payload_extract 2>> $LOG_FILE;;
 			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
@@ -440,7 +441,7 @@ main() {
 				fi
 				;;
 		esac
-	}
+	} || cd $HOME/extracted
 	get_super_size 2>> $LOG_FILE
 	get_partitions 2>> $LOG_FILE
 	get_read_write_state
@@ -509,7 +510,6 @@ for _ in "$@"; do
 				echo "Cannot continue because source files do not exist" 
 				exit 1
 			fi
-			cd $HOME/extracted
 			export CONTINUE=1
 			main;;
 		*)
