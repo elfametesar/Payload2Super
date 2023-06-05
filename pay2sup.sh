@@ -404,7 +404,7 @@ recovery() {
 	read_write 2>> $LOG_FILE
 	recovery_resize 2>> $LOG_FILE
 	pack 2>> $LOG_FILE
-	if [[ $RECOVERY == 1 ]]; then
+	if [[ $NOT_IN_RECOVERY == 1 ]]; then
 		echo "Moving super image to $OUT, you can flash it in recovery from there"
 		mv $HOME/flashable/super.img $OUT
 	else

@@ -2,12 +2,12 @@
 
 OUTFD=/proc/self/fd/$2
 ZIPFILE="$3"
-export RECOVERY=$(getprop sys.boot_completed)
+export NOT_IN_RECOVERY=$(getprop sys.boot_completed)
 TMPDIR=/data/local/tmp
 
 outfd() {
   while read line; do
-    if [[ -z $RECOVERY ]]; then 
+    if [[ -z $NOT_IN_RECOVERY ]]; then 
     	echo "ui_print $line" >> $OUTFD
     else 
     	echo "$line"
@@ -23,7 +23,7 @@ unzip "$ZIPFILE" -o -d $TMPDIR
 cd $TMPDIR
 $(which sh) pay2sup.sh --recovery | outfd
 cleanup || true
-if [[ -z $RECOVERY ]]; then
+if [[ -z $NOT_IN_RECOVERY ]]; then
 	avbctl --force disable-verification
 	avbctl --force disable-verity
 fi
