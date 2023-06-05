@@ -45,44 +45,5 @@ sh pay2sup.sh [optional parameters] -c
 If you wish to go back to EROFS to make partition images fit the super block, you can do that too. The tool will ask you during runtime.
 
 # To get this tool
-```
-git clone https://github.com/elfametesar/Payload2Super
-cd Payload2Super
-```
-# Example Usage
 
-```
-sh pay2sup.sh -rw -r -dfe -t $(nproc --all) <path-to-your-rom-file>
-```
-
-This is a multi-platform tool, meaning it can work on both x64 Linux distros and ARM64 Android devices. ~~To use it on Linux distros, you need ADB access once to your device in order to get the super block size.~~ You can now use this tool without needing ADB access, by manually adding super block size and slot suffix.
-
-Warning: Some shells may not be compatible, so make sure to use it on BASH, ZSH or a newer version of SHELL. Android SHELL is compatible. BASH is recommended.
-
-
-# Usage for dummies
-Start by typing in
-```
-sh pay2sup.sh 
-```
-And add your optional parameters, for read&write access:
-```
-sh pay2sup.sh -rw
-```
-For resizing partition images:
-```
-sh pay2sup.sh -rw -r
-```
-For disabling encryption:
-```
-sh pay2sup.sh -rw -r -dfe
-```
-For using multiple cores to make the program faster:
-```
-sh pay2sup.sh -rw -r -dfe -t <corenumber>
-```
-And finally in the end, specify your ROM path:
-```
-sh pay2sup.sh -rw -r -dfe -t <corenumber> <path-to-ROM>
-```
-
+Download in the releases section and flash it.
