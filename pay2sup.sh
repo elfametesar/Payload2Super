@@ -55,7 +55,7 @@ toolchain_check() {
 }
 
 cleanup() { 
-	rm -rf $HOME/extracted $HOME/flashable $HOME/super*
+	rm -rf $HOME/extracted $HOME/flashable $HOME/super* $HOME/empty_space
 }
 
 get_os_type() {
@@ -233,16 +233,14 @@ get_super_size() {
 		while true; do
 			if adb get-state | grep -q "device"; then
 				super_size=$(adb shell su -c blockdev --getsize64 /dev/block/by-name/super) || { echo -e "Can't do this without root permission. Make sure shell is granted with root access in your root app.\n"; }
-				SLOT=$(adb shell su -c getprop ro.boot.slot_suffix) && break
 			elif adb get-state | grep -q "recovery"; then
 				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) || { echo "A problem occured while estimating your device super size in recovery state, exiting"; exit 1; }
-				SLOT=$(adb shell getprop ro.boot.slot_suffix) && break
 			else
 				echo -e "Cannot access the device, put it in recovery mode as a last resort and connect to your PC. Program will automatically continue.\n"
 				adb wait-for-any-recovery
 				super_size=$(adb shell blockdev --getsize64 /dev/block/by-name/super) || { echo "A problem occured while estimating your device super size, exiting"; exit 1; }
-				SLOT=$(adb shell su -c getprop ro.boot.slot_suffix) && break
 			fi
+			SLOT=$(adb shell su -c getprop ro.boot.slot_suffix) && break
 		done
 	fi
 }
@@ -378,15 +376,15 @@ project_structure() {
 
 recovery_resize() {
 	shrink_before_resize 
+	sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
+	space=$(cat empty_space)
+	add_size=$( calc $space/$(wc -w <<< "$PARTS") )
+	echo "Expanding partitions"
 	for img in $PARTS; do
-		clear
-		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
-		space=$?
 		[[ $space == 1 ]] && {
 			echo "Partitions exceed the super block size, cannot continue"
 			exit 1
 	       	}
-		add_size=$( calc $space/$(wc -w <<< "$PARTS") )
 		sh $HOME/pay2sup_helper.sh expand $img ${add_size:-0} 1> /dev/null
 	done
 }
@@ -404,7 +402,7 @@ recovery() {
 	read_write 2>> $LOG_FILE
 	recovery_resize 2>> $LOG_FILE
 	pack 2>> $LOG_FILE
-	if [[ $NOT_IN_RECOVERY == 1 ]]; then
+	if [[ $IN_RECOVERY == 1 ]]; then
 		echo "Moving super image to $OUT, you can flash it in recovery from there"
 		mv $HOME/flashable/super.img $OUT
 	else
