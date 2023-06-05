@@ -80,7 +80,7 @@ disable_encryption() {
                	s|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
-               	s|,quota||;s|inlinecrypt||;s|,wrappedkey||' $TEMP/etc/fstab*
+               	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' $TEMP/etc/fstab*
         losetup -D
 	fallocate -l $( calc $(stat -c%s $vendor)-52428800) $vendor
 	resize2fs -f $vendor &> /dev/null
