@@ -15,10 +15,10 @@ shrink() {
 		[[ $space_size == 0 ]] && continue
 		shrink_space=$(calc $total_size-$space_size)
 		shrink_space=$(calc $shrink_space/1024/1024)
-		resize2fs -f $img ${shrink_space}M || while true; do
+		resize2fs -f $img ${shrink_space}M 2> /dev/null || while true; do
 			(( count++ ))
 			shrink_space=$( calc "$shrink_space+5" )
-			resize2fs -f $img ${shrink_space}M && break
+			resize2fs -f $img ${shrink_space}M 2> /dev/null && break
 			(( count == 30 )) && break
 		done
 		e2fsck -fy $img
