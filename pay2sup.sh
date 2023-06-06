@@ -76,8 +76,7 @@ get_partitions() {
 	if dump.erofs $vendor &> /dev/null; then
 		fuse.erofs $vendor $TEMP 1> /dev/null
 	else
-		loop=$(losetup -f)
-		losetup $loop $vendor 
+		loop=$(get_loop $vendor)
 		mount -o ro $loop $TEMP
 	fi
 	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
@@ -160,8 +159,7 @@ erofs_conversion() {
 	echo
 	[[ $choice == "n" ]] && return 1
 	for img in $PARTS; do
-		loop=$(losetup -f)
-		losetup $loop $img
+		loop=$(get_loop $img)
 		mount $loop $TEMP || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
 		echo -e "Converting ${img%*.img} to EROFS\n"
 		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img $TEMP 1> /dev/null
