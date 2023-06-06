@@ -11,6 +11,7 @@ export READ_ONLY=0
 export EROFS=0
 export DFE=0
 export TEMP=$HOME/tmp
+export TEMP2=$HOME/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
 
@@ -128,6 +129,29 @@ grant_rw(){
 	}
 }
 
+get_loop() {
+	local loop=$(losetup -f)
+	losetup $loop $1
+	echo $loop
+}
+
+rebuild() {
+	local loop=$(get_loop $1)
+	mount -o ro $loop $TEMP || { losetup -D; return; }
+	local size=$(blockdev --getsize64 $loop)
+	local secontext=$(ls -d -Z $TEMP | sed "s|$TEMP|$TEMP2|")
+	size=$( calc $size/1024/1024 )
+	local new_image=${1/.img/_rw.img}
+	fallocate -l ${size}M $new_image
+	mkfs.ext4 $new_image
+	local loop2=$(get_loop $new_image)
+	mount $loop2 $TEMP2
+	cp -ra $TEMP/* $TEMP2/
+	chcon -h $(echo ${secontext})
+	{ umount $TEMP $TEMP2 || umount -l $TEMP $TEMP2; losetup -D; } 2> /dev/null
+	mv $new_image $1
+}
+
 erofs_conversion() {
 	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
@@ -199,6 +223,9 @@ read_write() {
 			fi
 			echo -e "Making ${img%.img} partition read&write\n"
 			grant_rw $img 1> /dev/null
+			if tune2fs -l $img | grep -i -q shared_blocks; then
+				rebuild $img 1> /dev/null
+			fi
 			if [[ $img == vendor.img ]]; then
 				[[ $DFE == 1 ]] && sh $HOME/pay2sup_helper.sh dfe
 				sh $HOME/pay2sup_helper.sh remove_overlay
@@ -288,7 +315,9 @@ resize() {
 		clear
 		echo -e "PARTITION SIZES\n"
 		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 )
-	        [[ $? == 1 ]] && { erofs_conversion; return; }
+	        if [[ $? == 1 ]]; then
+			shrink_before_resize 1> /dev/null || { erofs_conversion; return; }
+		fi
 		echo -n "Enter the amount of space you wish to give for ${img%.img} (MB): "
 		read add_size
 		echo
@@ -369,12 +398,13 @@ package_extract_file() {
 }
 
 project_structure() {
-	rm -rf extracted flashable tmp
+	rm -rf extracted flashable tmp tmp2
 	mkdir -p \
 		flashable/META-INF/com/google/android/\
 		flashable/firmware-update\
 		extracted\
-		tmp
+		tmp\
+		tmp2
 }
 
 recovery_resize() {
