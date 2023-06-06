@@ -136,6 +136,7 @@ get_loop() {
 }
 
 rebuild() {
+	[[ $LINUX == 1 && ! -d /etc/selinux ]] && return
 	local loop=$(get_loop $1)
 	mount -o ro $loop $TEMP || { losetup -D; return; }
 	local size=$(blockdev --getsize64 $loop)
