@@ -188,7 +188,21 @@ super_extract() {
 		fi
 		ROM=super.img
 	}
+	if file $ROM | grep -q sparse; then
+		mv $ROM ${ROM/.img/_sparse.img}
+		simg2img ${ROM/.img/_sparse.img} $ROM
+		rm ${ROM/.img/_sparse.img}
+	fi
+
 	echo -e "Unpacking super\n"
+	if [[ -b $ROM ]]; then
+		if lpunpack $ROM extracted 1> /dev/null | grep -q "sparse"; then
+			echo -e "But extracting it from super block first because it is sparse\n"
+			dd if=/dev/block/by-name/super of=super_sparse.img
+			simg2img super_sparse.img super.img
+			rm super_sparse.img
+		fi
+	fi
 	lpunpack $ROM extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 	rm $HOME/super* &> /dev/null
 	cd extracted
