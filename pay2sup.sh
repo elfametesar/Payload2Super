@@ -190,9 +190,10 @@ super_extract() {
 		ROM=super.img
 	}
 	if file $ROM | grep -q sparse; then
-		mv $ROM ${ROM/.img/_sparse.img}
-		simg2img ${ROM/.img/_sparse.img} $ROM
-		rm ${ROM/.img/_sparse.img}
+		echo -e "Converting sparse super to raw\n"
+		simg2img $ROM super_raw.img
+		mv super_raw.img super.img
+		ROM=super.img
 	fi
 
 	echo -e "Unpacking super\n"
