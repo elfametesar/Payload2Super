@@ -154,10 +154,11 @@ rebuild() {
 }
 
 erofs_conversion() {
+	[[ $LINUX == 1 && ! -d /etc/linux ]] && return 1
 	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
 	echo
-	[[ $choice == "n" ]] && return
+	[[ $choice == "n" ]] && return 1
 	for img in $PARTS; do
 		loop=$(losetup -f)
 		losetup $loop $img
