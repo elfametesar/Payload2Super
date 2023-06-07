@@ -83,7 +83,7 @@ get_partitions() {
 	for fstab in $TEMP/etc/fstab*; do
 		FSTABS+=$(cat $fstab)
 	done
-	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
+	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" && $2 != "/cache" && $2 != "/misc" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
 	PART_LIST=${PART_LIST//\//}
 	PART_LIST=$(awk '{ print $1".img" }' <<< "$PART_LIST")
 	for img in $HOME/extracted/*.img; do
