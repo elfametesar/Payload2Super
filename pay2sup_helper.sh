@@ -30,7 +30,7 @@ get_sizes() {
 	for img in $PARTS; do
 		size=$(stat -c%s $img)
 		size=$( calc $size/1024/1024 )
-		echo -e "${img%.img/}\t${size}M"
+		echo -e "${img%.img}\t${size}M"
 		sum=$( calc $sum+$size )
 	done
 	echo -e "\nSuper block size is ${super_size}M.\n"
