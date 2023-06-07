@@ -196,14 +196,20 @@ super_extract() {
 
 	echo -e "Unpacking super\n"
 	if [[ -b $ROM ]]; then
-		if lpunpack $ROM extracted 1> /dev/null | grep -q "sparse"; then
+		case $SLOT in
+			_a) slot_num=0;;
+			_b) slot_num=1;;
+		esac
+		if lpunpack --slot=$slot_num $ROM extracted 1> /dev/null | grep -q "sparse"; then
 			echo -e "But extracting it from super block first because it is sparse\n"
 			dd if=/dev/block/by-name/super of=super_sparse.img
 			simg2img super_sparse.img super.img
 			rm super_sparse.img
+			lpunpack --slot=$slot_num super.img extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 		fi
+	else
+		lpunpack $ROM extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 	fi
-	lpunpack $ROM extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 	rm $HOME/super* &> /dev/null
 	cd extracted
 	for img in *.img; do
@@ -260,7 +266,7 @@ get_super_size() {
 	read super_size
 	echo
 	if (( ${super_size:-"0"} > 1 )); then
-		echo -n "Enter the slot name you want to use, leave empty if your device is A-only: "
+		echo -n "Enter the slot name you want to use (lowercase), leave empty if your device is A-only: "
 		read SLOT
 		case $SLOT in
 			"a"|"_a") SLOT=_a; return;;
@@ -444,8 +450,8 @@ recovery() {
 	chmod +x -R $HOME/bin
 	project_structure
 	get_os_type
-	super_extract 2> $LOG_FILE
-	get_super_size 2>> $LOG_FILE
+	get_super_size 2> $LOG_FILE
+	super_extract 2>> $LOG_FILE
 	get_partitions 2>> $LOG_FILE
 	read_write 2>> $LOG_FILE
 	recovery_resize 2>> $LOG_FILE
@@ -571,3 +577,4 @@ for _ in "$@"; do
 
 	esac
 done
+
