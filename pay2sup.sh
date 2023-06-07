@@ -61,12 +61,13 @@ cleanup() {
 }
 
 get_os_type() {
-	case $OSTYPE in
-		linux-gnu)
+	os=$(uname -o | tr '[:upper:]' '[:lower:]')
+	case $os in
+		*linux*)
 			export LINUX=1
 			export OUT=~;;
-		*)
-			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
+		android)
+			[[ ! -d $OUT ]] && mkdir $OUT
 			export BUSYBOX=busybox;;
 	esac
 }
