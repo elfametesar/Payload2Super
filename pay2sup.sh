@@ -153,7 +153,8 @@ rebuild() {
 }
 
 erofs_conversion() {
-	[[ $LINUX == 1 && ! -d /etc/linux ]] && return 1
+	[[ $LINUX == 1 && ! -d /etc/selinux ]] && return 1
+	[[ $RECOVERY == 1 ]] && return 1
 	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
 	echo
@@ -337,7 +338,10 @@ resize() {
 		echo -e "PARTITION SIZES\n"
 		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 )
 	        if [[ $? == 1 ]]; then
-			shrink_before_resize 1> /dev/null || { erofs_conversion; return; }
+			shrink_before_resize 1> /dev/null
+		        if ! sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
+				erofs_conversion && return || sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
+			fi	
 		fi
 		echo -n "Enter the amount of space you wish to give for ${img%.img} (MB): "
 		read add_size
