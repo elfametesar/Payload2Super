@@ -61,15 +61,14 @@ cleanup() {
 }
 
 get_os_type() {
-	os=$(uname -o | tr '[:upper:]' '[:lower:]')
-	case $os in
-		*linux*)
+	case $OSTYPE in
+		linux-gnu)
 			export LINUX=1
 			export OUT=~;;
-		android)
-			[[ ! -d $OUT ]] && mkdir $OUT
+		*)
+			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
 			export BUSYBOX=busybox;;
-	esac
+	esac	
 }
 
 get_partitions() {
@@ -572,4 +571,3 @@ for _ in "$@"; do
 
 	esac
 done
-
