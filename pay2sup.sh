@@ -61,12 +61,13 @@ cleanup() {
 }
 
 get_os_type() {
-	case $OSTYPE in
-		linux-gnu)
+	os=$(uname -o | tr '[:upper:]' '[:lower:]')
+	case $os in
+		*linux*)
 			export LINUX=1
 			export OUT=~;;
-		*)
-			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
+		android)
+			[[ ! -d $OUT ]] && mkdir $OUT
 			export BUSYBOX=busybox;;
 	esac
 }
@@ -76,15 +77,14 @@ get_partitions() {
 	if dump.erofs $vendor &> /dev/null; then
 		fuse.erofs $vendor $TEMP 1> /dev/null
 	else
-		loop=$(losetup -f)
-		losetup $loop $vendor 
+		loop=$(get_loop $vendor)
 		mount -o ro $loop $TEMP
 	fi
 	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	for fstab in $TEMP/etc/fstab*; do
 		FSTABS+=$(cat $fstab)
 	done
-	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" || $2 != "/metadata" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
+	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" && $2 != "/cache" && $2 != "/misc" && $2 != "/oem" && $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
 	PART_LIST=${PART_LIST//\//}
 	PART_LIST=$(awk '{ print $1".img" }' <<< "$PART_LIST")
 	for img in $HOME/extracted/*.img; do
@@ -154,13 +154,13 @@ rebuild() {
 }
 
 erofs_conversion() {
+	[[ $LINUX == 1 && ! -d /etc/linux ]] && return 1
 	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
 	echo
-	[[ $choice == "n" ]] && return
+	[[ $choice == "n" ]] && return 1
 	for img in $PARTS; do
-		loop=$(losetup -f)
-		losetup $loop $img
+		loop=$(get_loop $img)
 		mount $loop $TEMP || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
 		echo -e "Converting ${img%*.img} to EROFS\n"
 		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img $TEMP 1> /dev/null
@@ -189,9 +189,10 @@ super_extract() {
 		ROM=super.img
 	}
 	if file $ROM | grep -q sparse; then
-		mv $ROM ${ROM/.img/_sparse.img}
-		simg2img ${ROM/.img/_sparse.img} $ROM
-		rm ${ROM/.img/_sparse.img}
+		echo -e "Converting sparse super to raw\n"
+		simg2img $ROM super_raw.img
+		mv super_raw.img super.img
+		ROM=super.img
 	fi
 
 	echo -e "Unpacking super\n"
@@ -571,3 +572,4 @@ for _ in "$@"; do
 
 	esac
 done
+
