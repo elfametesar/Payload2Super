@@ -76,7 +76,8 @@ get_partitions() {
 	if dump.erofs $vendor &> /dev/null; then
 		fuse.erofs $vendor $TEMP 1> /dev/null
 	else
-		loop=$(get_loop $vendor)
+		loop=$(losetup -f)
+		losetup $loop $vendor
 		mount -o ro $loop $TEMP
 	fi
 	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
