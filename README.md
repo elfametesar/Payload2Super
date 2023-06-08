@@ -46,3 +46,4 @@ Download in the releases section and flash it.
 # Tested on
 
 - POCO F3
+- Motorola G20
