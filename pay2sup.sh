@@ -438,7 +438,7 @@ recovery_resize() {
 	sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
 	space=$(cat empty_space)
 	add_size=$( calc $space/$(wc -w <<< "$PARTS") )
-	echo "Expanding partitions"
+	echo -e "Expanding partitions\n"
 	for img in $PARTS; do
 		[[ $space == 1 ]] && {
 			echo "Partitions exceed the super block size, cannot continue"
@@ -449,9 +449,10 @@ recovery_resize() {
 }
 
 recovery() {
+	trap "cleanup; rm -rf $HOME/bin" EXIT
 	ROM=/dev/block/by-name/super
 	DFE=1
-	SPARSE="--sparse"
+	[[ $NOT_IN_RECOVERY != 1 ]] && SPARSE="--sparse"
 	chmod +x -R $HOME/bin
 	project_structure
 	get_os_type
@@ -462,8 +463,8 @@ recovery() {
 	recovery_resize 2>> $LOG_FILE
 	pack 2>> $LOG_FILE
 	if [[ $NOT_IN_RECOVERY == 1 ]]; then
-		echo "Moving super image to $OUT, you can flash it in recovery from there"
-		mv $HOME/flashable/super.img $OUT
+		rm -rf $HOME/extracted
+		flashable_package 2>> $LOG_FILE
 	else
 		echo "Flashing super image..."
 		simg2img $HOME/flashable/super.img /dev/block/by-name/super
