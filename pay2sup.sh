@@ -339,6 +339,7 @@ resize() {
 		echo -e "PARTITION SIZES\n"
 		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 )
 	        if [[ $? == 1 ]]; then
+			echo -e "Shrinking partitions because they exceed the super block size\n"
 			shrink_before_resize 1> /dev/null
 		        if ! sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
 				erofs_conversion && return || sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
@@ -357,8 +358,13 @@ pack() {
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
 	if [[ $RESIZE == 0 && $RECOVERY == 0 ]]; then
 		sh $HOME/pay2sup_helper.sh get $super_size 1> /dev/null 
-		[[ $? == 1 ]] && erofs_conversion
-		EROFS=1
+		if [[ $? == 1 ]]; then
+			echo -e "Shrinking partitions because they exceed the super block size\n"
+			shrink_before_resize 1> /dev/null
+		        if ! sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
+				erofs_conversion && return || sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
+			fi
+		fi
 	fi
 	[[ $RECOVERY == 0 ]] && {
 		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
