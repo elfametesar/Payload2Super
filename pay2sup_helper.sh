@@ -67,7 +67,7 @@ mount_vendor() {
 
 remove_overlay() {
 	mount_vendor
-	sed -i 's/^overlay/# /' $TEMP/etc/fstab*
+	sed -i 's/^overlay/# overlay/' $TEMP/etc/fstab*
 }
 
 disable_encryption() {
