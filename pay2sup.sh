@@ -19,7 +19,7 @@ trap "exit" INT
 trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
 
 
-[ $(id -u) -eq 0 ] && {
+[ $(id -u) -eq 0 ] || {
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
 	exit
 }
