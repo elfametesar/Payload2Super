@@ -5,22 +5,9 @@ calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 
 shrink() {
 	for img in "$@"; do
-		loop=$(losetup -f)
-		losetup $loop $img
-		mount $loop $TEMP || { echo -e "There was a problem shrinking $img, skipping\n" 1>&2; continue; }
-		total_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $2}')
-        	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
-		umount $TEMP || umount -l $TEMP
-		losetup -D
-		[[ $space_size == 0 ]] && continue
-		shrink_space=$(calc $total_size-$space_size)
-		shrink_space=$(calc $shrink_space/1024/1024)
-		resize2fs -f $img ${shrink_space}M 2> /dev/null || while true; do
-			(( count++ ))
-			shrink_space=$( calc "$shrink_space+5" )
-			resize2fs -f $img ${shrink_space}M 2> /dev/null && break
-			(( count == 30 )) && break
-		done
+		total_size=$(dumpe2fs -h $img |& awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
+        	used_size=$(dumpe2fs -h extracted/product.img |& awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print '$total_size'-count*size}')
+		resize2fs -f $img ${used_size}M 2> /dev/null 
 		e2fsck -fy $img
 	done
 }
