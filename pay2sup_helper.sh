@@ -5,12 +5,12 @@ calc(){ awk 'BEGIN{ print int('"$1"') }'; }
 
 shrink() {
 	for img in "$@"; do
-		total_size=$(dumpe2fs -h $img |& awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
-        	used_size=$(dumpe2fs -h $img |& awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print '$total_size'-count*size}')
-		echo "total: $total_size used: $used_size "
-		used_size=$(( used_size/1024/1024))
-		resize2fs -f $img ${used_size}M 2> /dev/null 
-		e2fsck -fy $img
+		total_size=$(dumpe2fs -h "$img" |& awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
+        	used_size=$(dumpe2fs -h "$img" |& awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print '$total_size'-count*size}')
+		used_size=$(( used_size/1024/1024))M
+		resize2fs -f "$img" $used_size 2> /dev/null 
+		resize2fs -f -M "$img" 2> /dev/null 
+		e2fsck -fy "$img"
 	done
 }
 
@@ -23,6 +23,7 @@ get_sizes() {
 		sum=$( calc $sum+$size )
 	done
 	echo -e "\nSuper block size is ${super_size}M.\n"
+	echo -e "Free space: $( calc $super_size-$sum )\n"
 	if (( super_size-sum < 0 )); then
 		echo -e "\nPartition sizes exceed the super block size. Program cannot continue. You need to debloat the images you can find in $PWD or convert back to EROFS in order to continue.\n" 1>&2
 		exit 1
@@ -54,9 +55,16 @@ mount_vendor() {
 		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
 }
 
+unmount_vendor() {
+	umount "$TEMP" || umount -l "$TEMP"
+	losetup -D
+}
+
 remove_overlay() {
 	mount_vendor
 	sed -i 's/^overlay/# overlay/' $TEMP/etc/fstab*
+	unmount_vendor
+	shrink $vendor 1> /dev/null
 }
 
 disable_encryption() {
@@ -70,9 +78,7 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' $TEMP/etc/fstab*
-        losetup -D
-	fallocate -l $( calc $(stat -c%s $vendor)-52428800) $vendor
-	resize2fs -f $vendor &> /dev/null
+	unmount_vendor
 	echo -e "Android file encryption system has been disabled succesfully\n"
 	sleep 2
 }
