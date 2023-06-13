@@ -26,7 +26,7 @@ trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null
 
 TOOLCHAIN=(make_ext4fs \
 	mkfs.erofs \
-	busybox \
+	dumpe2fs \
 	pigz \
 	7z \
 	dump.erofs \
@@ -45,7 +45,7 @@ toolchain_check() {
 			continue
 		else
 			[[ $tool == adb && $LINUX == 0 ]] && continue
-			[[ $tool == make_ext4fs || $tool == busybox && $LINUX == 1 ]] && continue
+			[[ $tool == make_ext4fs && $LINUX == 1 ]] && continue
 			missing+=($tool)
 		fi
 	done
@@ -67,7 +67,6 @@ get_os_type() {
 			export OUT=~;;
 		*)
 			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
-			export BUSYBOX=busybox;;
 	esac	
 }
 
@@ -76,14 +75,12 @@ get_partitions() {
 	if dump.erofs $vendor &> /dev/null; then
 		fuse.erofs $vendor "$TEMP" 1> /dev/null
 	else
-		loop=$(losetup -f)
-		losetup $loop $vendor
-		mount -o ro $loop "$TEMP"
+		7z e $vendor "etc/fstab*" 1> /dev/null
+		FSTABS=$(cat fstab*)
+		rm -f fstab*
 	fi
-	mountpoint -q "$TEMP" || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
-	for fstab in "$TEMP"/etc/fstab*; do
-		FSTABS+=$(cat $fstab)
-	done
+	[[ -z $FSTABS ]] && FSTABS=$(cat $TEMP/etc/fstab*)
+	[[ -z $FSTABS ]] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" && $2 != "/cache" && $2 != "/misc" && $2 != "/oem" && $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
 	PART_LIST=${PART_LIST//\//}
 	PART_LIST=$(awk '{ print $1".img" }' <<< "$PART_LIST")
@@ -91,7 +88,6 @@ get_partitions() {
 		[[ $PART_LIST == *${img##*/}* ]] && export PARTS+="${img##*/} "
 	done
 	umount "$TEMP" || umount -l "$TEMP"
-	losetup -D
 }
 
 toolchain_download() {
@@ -129,12 +125,6 @@ grant_rw(){
 	}
 }
 
-get_loop() {
-	local loop=$(losetup -f)
-	losetup $loop $1
-	echo $loop
-}
-
 rebuild() {
 	[[ $LINUX == 1 && ! -d /etc/selinux ]] && return
 	loop=$(losetup -f)
@@ -164,7 +154,8 @@ erofs_conversion() {
 	echo
 	[[ $choice == "n" ]] && return 1
 	for img in $PARTS; do
-		loop=$(get_loop $img)
+		loop=$(losetup -f)
+		losetup $loop $img
 		mount $loop "$TEMP" || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
 		echo -e "Converting ${img%*.img} to EROFS\n"
 		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img "$TEMP" 1> /dev/null
@@ -194,7 +185,7 @@ super_extract() {
 	}
 	if file "$ROM" | grep -q sparse; then
 		echo -e "Converting sparse super to raw\n"
-		simg2img "$ROM" super_raw.img
+		simg2img "$ROM" super_raw.img 1> /dev/null
 		mv super_raw.img super.img
 		ROM=super.img
 	fi
@@ -341,8 +332,8 @@ resize() {
 		fi
 		clear
 		echo -e "PARTITION SIZES\n"
-		sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 )
-	        if [[ $? == 1 ]]; then
+		
+	        if ! sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ); then
 			echo -e "Shrinking partitions because they exceed the super block size\n"
 			shrink_before_resize 1> /dev/null
 		        if ! sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
@@ -373,8 +364,8 @@ pack() {
 		[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
 	fi
 	if [[ $RESIZE == 0 && $RECOVERY == 0 ]]; then
-		sh "$HOME"/pay2sup_helper.sh get $super_size 1> /dev/null 
-		if [[ $? == 1 ]]; then
+		
+		if ! sh "$HOME"/pay2sup_helper.sh get $super_size 1> /dev/null; then
 			echo -e "Shrinking partitions because they exceed the super block size\n"
 			shrink_before_resize 1> /dev/null
 		        if ! sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
