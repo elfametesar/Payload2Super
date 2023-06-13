@@ -38,7 +38,7 @@ TOOLCHAIN=(make_ext4fs \
 	adb)
 
 toolchain_check() {
-	[[ -d "$HOME"/bin ]] || toolchain_download
+	[[ -d "$HOME"/bin ]] && chmod +x -R "$HOME"/bin || toolchain_download
 	echo -e "Checking the toolchain integrity\n"
 	for tool in ${TOOLCHAIN[@]}; do
 		if [[ -f "$HOME"/bin/$tool ]]; then
@@ -137,21 +137,23 @@ get_loop() {
 
 rebuild() {
 	[[ $LINUX == 1 && ! -d /etc/selinux ]] && return
-	local loop=$(get_loop $1)
+	loop=$(losetup -f)
+	losetup $loop $1
 	mount -o ro $loop "$TEMP" || { losetup -D; return; }
-	local size=$(blockdev --getsize64 $loop)
-	local secontext=$(ls -d -Z "$TEMP" | sed "s|$TEMP|$TEMP2|")
-	size=$( calc $size/1024/1024 )
-	local new_image=${1/.img/_rw.img}
-	(( size < 1 )) && size=1
-	fallocate -l ${size}M $new_image
-	mkfs.ext4 $new_image
-	local loop2=$(get_loop $new_image)
-	mount $loop2 "$TEMP2"
 	cp -ra "$TEMP"/* "$TEMP2"/
-	chcon -h $(echo ${secontext})
-	{ umount "$TEMP" "$TEMP2" || umount -l "$TEMP" "$TEMP2"; losetup -D; } 2> /dev/null
-	mv $new_image $1
+	size=$(du -sm | cut -f1)
+	find "$TEMP" -exec ls -d -Z {} + > $HOME/${1%.img}_context
+	context=$(find "$TEMP" -exec ls -d -Z {} +)
+	umount "$TEMP" || umount -l "$TEMP2" && losetup -D
+	make_ext4fs -l ${size}M -L ${1%.img} -a ${1%.img} $1 "$TEMP2" || return
+	loop=$(losetup -f)
+	losetup $loop $1
+	mount $loop "$TEMP"
+	while read line; do
+		chcon -h $(echo $line)
+	done <<< "$context"
+	umount "$TEMP" || umount -l "$TEMP"
+	losetup -D
 }
 
 erofs_conversion() {
@@ -248,8 +250,7 @@ read_write() {
 			echo -e "Making ${img%.img} partition read&write\n"
 			grant_rw $img 1> /dev/null
 			if tune2fs -l $img | grep -i -q shared_blocks; then
-				echo $img
-				rebuild $img #1> /dev/null
+				rebuild $img 1> /dev/null
 			fi
 			if [[ $img == vendor.img ]]; then
 				[[ $DFE == 1 ]] && sh "$HOME"/pay2sup_helper.sh dfe

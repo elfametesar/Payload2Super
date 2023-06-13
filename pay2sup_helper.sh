@@ -94,10 +94,13 @@ restore_secontext() {
 		loop=$(losetup -f)
 		losetup $loop $img
 		mount -o rw $loop $TEMP || continue
+		
 		while read line; do
-			chcon -h $(echo "$line")
-		done < "$HOME"/${img%.img}_context
-		{ umount $TEMP || umount -l $TEMP; } 2> /dev/null
+			[[ -z $line ]] && break
+			context=$(grep "$line" $HOME/${img%.img}_context)
+			chcon -h $(echo "$context") 2> /dev/null
+		done <<< "$(find "$TEMP" -exec ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
+		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done
 }
