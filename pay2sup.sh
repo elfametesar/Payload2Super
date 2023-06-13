@@ -298,16 +298,6 @@ get_super_size() {
 	fi
 }
 
-wait_for_edit() {
-	for img in $PATH; do
-		ws_path=$HOME/workspace/${img%.img}
-		mkdir -p $ws_path
-		loop=$(losetup -f)
-		losetup $loop $img
-		mount $loop $ws_path
-	done
-}
-
 shrink_before_resize() {
 	echo -e "Shrinking partitions...\n"
 	sh $HOME/pay2sup_helper.sh shrink $PARTS 1> /dev/null
