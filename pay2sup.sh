@@ -57,7 +57,7 @@ toolchain_check() {
 }
 
 cleanup() { 
-	rm -rf $HOME/extracted $HOME/flashable $HOME/super* $HOME/empty_space
+	rm -rf $HOME/extracted $HOME/flashable $HOME/super* $HOME/empty_space $HOME/*_context
 }
 
 get_os_type() {
@@ -298,6 +298,16 @@ get_super_size() {
 	fi
 }
 
+wait_for_edit() {
+	for img in $PATH; do
+		ws_path=$HOME/workspace/${img%.img}
+		mkdir -p $ws_path
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount $loop $ws_path
+	done
+}
+
 shrink_before_resize() {
 	echo -e "Shrinking partitions...\n"
 	sh $HOME/pay2sup_helper.sh shrink $PARTS 1> /dev/null
@@ -356,6 +366,18 @@ resize() {
 pack() {
 	[[ $BACK_TO_EROFS == 0 && $DFE == 1 && $READ_ONLY == 1 ]] && \
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
+	[[ $RECOVERY == 0 ]] && {
+		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue. If you don't have SELINUX installed in your system, be careful not to replace system files as it will break SELINUX contexts."
+		read
+		echo
+		[[ -d /etc/selinux && $READ_ONLY == 0 ]] && echo -e "Restoring SELINUX contexts...\n" && sh $HOME/pay2sup_helper.sh restore_secontext 2>> $LOG_FILE 1> /dev/null
+	}
+	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 && $RECOVERY == 0 ]]; then
+		echo -en "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
+		read shrink
+		echo
+		[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
+	fi
 	if [[ $RESIZE == 0 && $RECOVERY == 0 ]]; then
 		sh $HOME/pay2sup_helper.sh get $super_size 1> /dev/null 
 		if [[ $? == 1 ]]; then
@@ -366,17 +388,6 @@ pack() {
 			fi
 		fi
 	fi
-	[[ $RECOVERY == 0 ]] && {
-		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
-		read
-		echo
-	}
-	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 && $RECOVERY == 0 ]]; then
-		echo -en "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
-		read shrink
-		echo
-		[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
-	fi 	
 	for img in *.img; do
 		if [[ $PARTS == *$img* ]]; then
 			lp_part_name=${img%.img}$SLOT
@@ -511,6 +522,7 @@ main() {
 	[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
 	[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
 	get_read_write_state
+	[[ $GRANT_RW == 1 || $READ_ONLY == 0 ]] && [[ -d /etc/selinux ]] && echo -e "Preserving SELINUX contexts...\n" && sh $HOME/pay2sup_helper.sh preserve_secontext 2>> $LOG_FILE 1> /dev/null
 	pack 2>> $LOG_FILE
 	flashable_package 2>> $LOG_FILE
 	cleanup

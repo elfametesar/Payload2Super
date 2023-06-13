@@ -88,10 +88,38 @@ disable_encryption() {
 	sleep 2
 }
 
+restore_secontext() {
+	for img in $PARTS; do
+		[[ -f "$HOME/${img%.img}_context" && -s "$HOME/${img%.img}_context" ]] || continue
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount -o rw $loop $TEMP || continue
+		while read line; do
+			chcon -h $(echo "$line")
+		done < "$HOME"/${img%.img}_context
+		{ umount $TEMP || umount -l $TEMP; } 2> /dev/null
+		losetup -D
+	done
+}
+
+preserve_secontext() {
+	for img in $PARTS; do
+		[[ -f "$HOME/${img%.img}_context" && -s "$HOME/${img%.img}_context" ]] && continue 
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount -o ro $loop $TEMP || continue
+		find $TEMP -exec ls -d -Z {} \; > $HOME/${img%.img}_context
+		{ umount $TEMP || umount -l $TEMP; } 2> /dev/null
+		losetup -D
+	done
+}
+
 case $1 in
 	"shrink") shift; shrink "$@";;
 	"get") get_sizes $2;;
 	"expand") add_space $2 $3;;
 	"dfe") disable_encryption;;
 	"remove_overlay") remove_overlay;;
+	"preserve_secontext") preserve_secontext;;
+	"restore_secontext") restore_secontext;;
 esac
