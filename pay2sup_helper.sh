@@ -45,12 +45,12 @@ add_space() {
 }
 
 mount_vendor() {
-	vendor=$HOME/extracted/vendor.img
-	fallocate -l $( calc $(stat -c%s $vendor)+52428800) $vendor
-	resize2fs -f $vendor &> /dev/null
+	vendor="$HOME"/extracted/vendor.img
+	fallocate -l $( calc $(stat -c%s "$vendor")+52428800) "$vendor"
+	resize2fs -f "$vendor" &> /dev/null
 	loop=$(losetup -f)
-	losetup $loop $vendor
-	mount $loop $TEMP || \
+	losetup $loop "$vendor"
+	mount $loop "$TEMP" || \
 		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
 }
 
@@ -61,9 +61,9 @@ unmount_vendor() {
 
 remove_overlay() {
 	mount_vendor
-	sed -i 's/^overlay/# overlay/' $TEMP/etc/fstab*
+	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
 	unmount_vendor
-	shrink $vendor 1> /dev/null
+	shrink "$vendor" 1> /dev/null
 }
 
 disable_encryption() {
@@ -76,7 +76,7 @@ disable_encryption() {
                	s|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
-               	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' $TEMP/etc/fstab*
+               	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
 	unmount_vendor
 	echo -e "Android file encryption system has been disabled succesfully\n"
 	sleep 2
@@ -84,16 +84,16 @@ disable_encryption() {
 
 restore_secontext() {
 	for img in $PARTS; do
-		[[ -f "$HOME/${img%.img}_context" && -s "$HOME/${img%.img}_context" ]] || continue
+		[[ -f $HOME/${img%.img}_context && -s $HOME/${img%.img}_context ]] || continue
 		loop=$(losetup -f)
 		losetup $loop $img
-		mount -o rw $loop $TEMP || continue
+		mount -o rw $loop "$TEMP" || continue
 		
 		while read line; do
 			[[ -z $line ]] && break
-			context=$(grep "$line" $HOME/${img%.img}_context)
+			context=$(grep "$line" "$HOME"/${img%.img}_context)
 			chcon -h $(echo "$context") 2> /dev/null
-		done <<< "$(find "$TEMP" -exec ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
+		done <<< "$(find $TEMP -exec ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
 		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done
@@ -101,12 +101,12 @@ restore_secontext() {
 
 preserve_secontext() {
 	for img in $PARTS; do
-		[[ -f "$HOME/${img%.img}_context" && -s "$HOME/${img%.img}_context" ]] && continue 
+		[[ -f $HOME/${img%.img}_context && -s $HOME/${img%.img}_context ]] && continue 
 		loop=$(losetup -f)
 		losetup $loop $img
-		mount -o ro $loop $TEMP || continue
-		find $TEMP -exec ls -d -Z {} + > $HOME/${img%.img}_context
-		{ umount $TEMP || umount -l $TEMP; } 2> /dev/null
+		mount -o ro $loop "$TEMP" || continue
+		find "$TEMP" -exec ls -d -Z {} + > "$HOME"/${img%.img}_context
+		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done
 }
