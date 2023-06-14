@@ -1,7 +1,7 @@
 #!/bin/env sh
 
 trap "{ umount $TEMP || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
-calc(){ awk 'BEGIN{ print int('"$1"') }'; }
+calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 shrink() {
 	for img in "$@"; do
@@ -23,7 +23,6 @@ get_sizes() {
 		sum=$( calc $sum+$size )
 	done
 	echo -e "\nSuper block size is ${super_size}M.\n"
-	echo -e "Free space: $( calc $super_size-$sum )\n"
 	if (( super_size-sum < 0 )); then
 		echo -e "\nPartition sizes exceed the super block size. Program cannot continue. You need to debloat the images you can find in $PWD or convert back to EROFS in order to continue.\n" 1>&2
 		exit 1

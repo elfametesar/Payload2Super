@@ -108,7 +108,7 @@ toolchain_download() {
 }
 
 
-calc(){ awk 'BEGIN{ print int('"$1"') }'; }
+calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 grant_rw(){
 	img_size=$(stat -c%s $1)
