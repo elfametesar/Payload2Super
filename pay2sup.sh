@@ -1,16 +1,17 @@
 #!/bin/env sh
 
-export PATH=$PWD/bin:$PATH
-export HOME=$PWD
+export PATH="$PWD/bin:$PATH"
+export HOME="$PWD"
 export LINUX=0
-export LOG_FILE=$HOME/pay2sup.log
+export LOG_FILE="$HOME/pay2sup.log"
 export OUT=/sdcard/Payload2Super
 export GRANT_RW=0
 export RESIZE=0
 export READ_ONLY=0
 export EROFS=0
 export DFE=0
-export TEMP=$HOME/tmp
+export TEMP="$HOME"/tmp
+export TEMP2="$HOME"/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
 
@@ -18,13 +19,14 @@ trap "exit" INT
 trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
 
 
-[[ $(id -u) != 0 ]] && {
+[ $(id -u) -eq 0 ] || {
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
 	exit
 }
 
 TOOLCHAIN=(make_ext4fs \
 	mkfs.erofs \
+	dumpe2fs \
 	busybox \
 	pigz \
 	7z \
@@ -37,10 +39,10 @@ TOOLCHAIN=(make_ext4fs \
 	adb)
 
 toolchain_check() {
-	[[ -d $HOME/bin ]] || toolchain_download
+	[[ -d "$HOME"/bin ]] && chmod +x -R "$HOME"/bin || toolchain_download
 	echo -e "Checking the toolchain integrity\n"
 	for tool in ${TOOLCHAIN[@]}; do
-		if [[ -f $HOME/bin/$tool ]]; then
+		if [[ -f "$HOME"/bin/$tool ]]; then
 			continue
 		else
 			[[ $tool == adb && $LINUX == 0 ]] && continue
@@ -50,13 +52,13 @@ toolchain_check() {
 	done
 	[[ -z $missing ]] || { \
 		echo "${missing[@]} tool(s) missing in path, re-run the script to renew the toolchain."
-		rm -rf $HOME/bin
+		rm -rf "$HOME"/bin
 		exit 1
 	}
 }
 
 cleanup() { 
-	rm -rf $HOME/extracted $HOME/flashable $HOME/super* $HOME/empty_space
+	rm -rf "$HOME"/extracted "$HOME"/flashable "$HOME"/super* "$HOME"/empty_space "$HOME"/*_context
 }
 
 get_os_type() {
@@ -66,35 +68,32 @@ get_os_type() {
 			export OUT=~;;
 		*)
 			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
-			export BUSYBOX=busybox;;
-	esac
+			BUSYBOX=busybox
+	esac	
 }
 
 get_partitions() {
-	vendor=$HOME/extracted/vendor.img
+	vendor="$HOME"/extracted/vendor.img
 	if dump.erofs $vendor &> /dev/null; then
-		fuse.erofs $vendor $TEMP 1> /dev/null
+		fuse.erofs $vendor "$TEMP" 1> /dev/null
 	else
-		loop=$(losetup -f)
-		losetup $loop $vendor 
-		mount -o ro $loop $TEMP
+		7z e $vendor "etc/fstab*" 1> /dev/null
+		FSTABS=$(cat fstab*)
+		rm -f fstab*
 	fi
-	mountpoint -q $TEMP || { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
-	for fstab in $TEMP/etc/fstab*; do
-		FSTABS+=$(cat $fstab)
-	done
-	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" || $2 != "/metadata" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
+	[[ -z $FSTABS ]] && FSTABS=$(cat $TEMP/etc/fstab*)
+	[[ -z $FSTABS ]] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
+	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" && $2 != "/cache" && $2 != "/misc" && $2 != "/oem" && $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
 	PART_LIST=${PART_LIST//\//}
 	PART_LIST=$(awk '{ print $1".img" }' <<< "$PART_LIST")
-	for img in $HOME/extracted/*.img; do
+	for img in "$HOME"/extracted/*.img; do
 		[[ $PART_LIST == *${img##*/}* ]] && export PARTS+="${img##*/} "
 	done
-	umount $TEMP || umount -l $TEMP
-	losetup -D
+	umount "$TEMP" || umount -l "$TEMP"
 }
 
 toolchain_download() {
-	[[ -d $HOME/bin ]] && return
+	[[ -d "$HOME"/bin ]] && chmod +x -R $HOME/bin && return
 	if [[ $LINUX == 0 ]]; then
 		   URL="https://github.com/elfametesar/uploads/raw/main/toolchain_android_arm64.tar"
 	else
@@ -103,13 +102,13 @@ toolchain_download() {
 	echo "Downloading toolchain"
 	curl -L $URL -o ${URL##*/} 1> /dev/null
 	echo -e "Extracting toolchain\n"
-	mkdir $HOME/bin
-	tar xf ${URL##*/} -C $HOME/bin/
+	mkdir "$HOME"/bin
+	tar xf ${URL##*/} -C "$HOME"/bin/
 	rm ${URL##*/} 	
 }
 
 
-calc(){ awk 'BEGIN{ print int('"$1"') }'; }
+calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 grant_rw(){
 	img_size=$(stat -c%s $1)
@@ -128,18 +127,41 @@ grant_rw(){
 	}
 }
 
+rebuild() {
+	[[ $LINUX == 1 && ! -d /etc/selinux ]] && return
+	loop=$(losetup -f)
+	losetup $loop $1
+	mount -o ro $loop "$TEMP" || { losetup -D; return; }
+	$BUSYBOX cp -rf -c "$TEMP"/* "$TEMP2"/
+	size=$(du -sm | cut -f1)
+	find "$TEMP" -exec ls -d -Z {} + > $HOME/${1%.img}_context
+	context=$(find "$TEMP" -exec ls -d -Z {} +)
+	umount "$TEMP" || umount -l "$TEMP2" && losetup -D
+	make_ext4fs -l ${size}M -L ${1%.img} -a ${1%.img} $1 "$TEMP2" || return
+	loop=$(losetup -f)
+	losetup $loop $1
+	mount $loop "$TEMP"
+	while read line; do
+		chcon -h $(echo $line)
+	done <<< "$context"
+	umount "$TEMP" || umount -l "$TEMP"
+	losetup -D
+}
+
 erofs_conversion() {
+	[[ $LINUX == 1 && ! -d /etc/selinux ]] && return 1
+	[[ $RECOVERY == 1 ]] && return 1
 	echo -n "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
 	echo
-	[[ $choice == "n" ]] && return
+	[[ $choice == "n" ]] && return 1
 	for img in $PARTS; do
 		loop=$(losetup -f)
 		losetup $loop $img
-		mount $loop $TEMP || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
+		mount $loop "$TEMP" || { echo -e "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping.\n"; continue; }
 		echo -e "Converting ${img%*.img} to EROFS\n"
-		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img $TEMP 1> /dev/null
-		{ umount $TEMP || umount -l $TEMP && losetup -D; } &> /dev/null
+		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img "$TEMP" 1> /dev/null
+		{ umount "$TEMP" || umount -l "$TEMP" && losetup -D; } &> /dev/null
 		mv ${img%*.img}_erofs.img $img
 	done
 	BACK_TO_EROFS=1
@@ -147,15 +169,15 @@ erofs_conversion() {
 
 
 super_extract() {
-	if [[ -b $ROM && $LINUX == 1 ]]; then
+	if [[ -b "$ROM" && $LINUX == 1 ]]; then
 		   echo "Extracting from block devices is Android-only feature"
 		   exit 1
 	fi
-	{ file $ROM | grep -q -i "archive"; } && {
+	{ file "$ROM" | grep -q -i "archive"; } && {
 		echo -e "Extracting super from archive (This takes a while)\n"
-		super_path="$(7z l $ROM | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
-		7z e $ROM "*.img" "*/*.img" "*/*/*.img" -o$HOME/extracted 1> /dev/null
-		7z e $ROM "${super_path}" -o$HOME 1> /dev/null
+		super_path="$(7z l "$ROM" | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
+		7z e -y "$ROM" "*.img" "*/*.img" "*/*/*.img" -o"$HOME"/extracted 1> /dev/null
+		7z e -y "$ROM" "${super_path}" -o"$HOME" 1> /dev/null
 		if [[ ${super_path##*/} == *.gz ]]; then
 			pigz -d ${super_path##*/}
 		else
@@ -163,9 +185,30 @@ super_extract() {
 		fi
 		ROM=super.img
 	}
+	if file "$ROM" | grep -q sparse; then
+		echo -e "Converting sparse super to raw\n"
+		simg2img "$ROM" super_raw.img 1> /dev/null
+		mv super_raw.img super.img
+		ROM=super.img
+	fi
+
 	echo -e "Unpacking super\n"
-	lpunpack $ROM extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
-	rm $HOME/super* &> /dev/null
+	if [[ -b "$ROM" ]]; then
+		case $SLOT in
+			_a) slot_num=0;;
+			_b) slot_num=1;;
+		esac
+		if lpunpack --slot=$slot_num "$ROM" extracted 2>&1 | grep -q "sparse"; then
+			echo -e "But extracting it from super block first because it is sparse\n"
+			dd if=/dev/block/by-name/super of=super_sparse.img
+			simg2img super_sparse.img super.img
+			rm super_sparse.img
+			lpunpack --slot=$slot_num super.img extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
+		fi
+	else
+		lpunpack "$ROM" extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
+	fi
+	rm "$HOME"/super* &> /dev/null
 	cd extracted
 	for img in *.img; do
 		[[ -s $img ]] || { rm $img; continue; }
@@ -177,7 +220,7 @@ super_extract() {
 
 payload_extract() {
 	echo -e "Extracting images from payload (This takes a while)\n"
-	payload-dumper -c ${CPU:-1} -o extracted $ROM 1> /dev/null || { echo "Program cannot extract payload"; exit 1; }
+	payload-dumper -c ${CPU:-1} -o extracted "$ROM" 1> /dev/null || { echo "Program cannot extract payload"; exit 1; }
 	cd extracted
 }
 
@@ -187,21 +230,24 @@ read_write() {
 		if dump.erofs $img 1> /dev/null; then 
 			[[ $LINUX == 1 && ! -d /etc/selinux ]] && echo -e "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only...\n" && sleep 2 && export READ_ONLY=1 && return 1
 			echo -e "Converting EROFS ${img%.img} image to ext4\n"
-			sh $HOME/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
-			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh $HOME/pay2sup_helper.sh dfe
+			sh "$HOME"/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
+			[[ $DFE == 1 ]] && [[ $img == vendor.img ]] && sh "$HOME"/pay2sup_helper.sh dfe
 		else
 			if ! tune2fs -l $img | grep -i -q shared_blocks; then
 				[[ $img == vendor.img ]] && {
-				       	[[ $DFE == 1 ]] && sh $HOME/pay2sup_helper.sh dfe
-					sh $HOME/pay2sup_helper.sh remove_overlay
+				       	[[ $DFE == 1 ]] && sh "$HOME"/pay2sup_helper.sh dfe
+					sh "$HOME"/pay2sup_helper.sh remove_overlay
 				}
 				continue
 			fi
 			echo -e "Making ${img%.img} partition read&write\n"
 			grant_rw $img 1> /dev/null
+			if tune2fs -l $img | grep -i -q shared_blocks; then
+				rebuild $img 1> /dev/null
+			fi
 			if [[ $img == vendor.img ]]; then
-				[[ $DFE == 1 ]] && sh $HOME/pay2sup_helper.sh dfe
-				sh $HOME/pay2sup_helper.sh remove_overlay
+				[[ $DFE == 1 ]] && sh "$HOME"/pay2sup_helper.sh dfe
+				sh "$HOME"/pay2sup_helper.sh remove_overlay
 			fi
 		fi
 	done
@@ -218,7 +264,7 @@ get_super_size() {
 	read super_size
 	echo
 	if (( ${super_size:-"0"} > 1 )); then
-		echo -n "Enter the slot name you want to use, leave empty if your device is A-only: "
+		echo -n "Enter the slot name you want to use (lowercase), leave empty if your device is A-only: "
 		read SLOT
 		case $SLOT in
 			"a"|"_a") SLOT=_a; return;;
@@ -250,7 +296,7 @@ get_super_size() {
 
 shrink_before_resize() {
 	echo -e "Shrinking partitions...\n"
-	sh $HOME/pay2sup_helper.sh shrink $PARTS 1> /dev/null
+	sh "$HOME"/pay2sup_helper.sh shrink $PARTS 1> /dev/null
 }
 
 get_read_write_state() {
@@ -259,8 +305,9 @@ get_read_write_state() {
 			export EROFS=1
 			export READ_ONLY=1
 			return 1
-		elif tune2fs -l $img &> /dev/null | grep -i -q shared_blocks; then
+		elif tune2fs -l $img 2> /dev/null | grep -i -q shared_blocks; then
 			[[ $GRANT_RW == 0 ]] && echo -e "Program cannot resize partitions because they are read-only\n"
+			[[ -s $img ]] || continue
 			export READ_ONLY=1
 			return 1
 		else
@@ -287,12 +334,18 @@ resize() {
 		fi
 		clear
 		echo -e "PARTITION SIZES\n"
-		sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 )
-	        [[ $? == 1 ]] && { erofs_conversion; return; }
+		
+	        if ! sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ); then
+			echo -e "Shrinking partitions because they exceed the super block size\n"
+			shrink_before_resize 1> /dev/null
+		        if ! sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
+				erofs_conversion && return || sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
+			fi	
+		fi
 		echo -n "Enter the amount of space you wish to give for ${img%.img} (MB): "
 		read add_size
 		echo
-		sh $HOME/pay2sup_helper.sh expand $img ${add_size:-0}
+		sh "$HOME"/pay2sup_helper.sh expand $img ${add_size:-0}
 		sleep 1
 	done
 }
@@ -300,29 +353,35 @@ resize() {
 pack() {
 	[[ $BACK_TO_EROFS == 0 && $DFE == 1 && $READ_ONLY == 1 ]] && \
 	       echo -e "Because partitions are still read-only, file encryption disabling is not possible.\n"
-	if [[ $RESIZE == 0 && $RECOVERY == 0 ]]; then
-		sh $HOME/pay2sup_helper.sh get $super_size 1> /dev/null 
-		[[ $? == 1 ]] && erofs_conversion
-		EROFS=1
-	fi
 	[[ $RECOVERY == 0 ]] && {
-		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue."
+		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue. If you don't have SELINUX installed in your system, be careful not to replace system files as it will break SELINUX contexts."
 		read
 		echo
+		[[ -d /etc/selinux && $READ_ONLY == 0 ]] && echo -e "Restoring SELINUX contexts...\n" && sh "$HOME"/pay2sup_helper.sh restore_secontext 2>> "$LOG_FILE" 1> /dev/null
 	}
-	if [[ $BACK_TO_EROFS=0 && $RESIZE == 0 && $READ_ONLY == 0 && $RECOVERY == 0 ]]; then
+	if [[ $BACK_TO_EROFS == 0 && $RESIZE == 0 && $READ_ONLY == 0 && $RECOVERY == 0 ]]; then
 		echo -en "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
 		echo
 		[[ $shrink == "y" ]] && shrink_before_resize 2> /dev/null
-	fi 	
+	fi
+	if [[ $RESIZE == 0 && $RECOVERY == 0 ]]; then
+		
+		if ! sh "$HOME"/pay2sup_helper.sh get $super_size 1> /dev/null; then
+			echo -e "Shrinking partitions because they exceed the super block size\n"
+			shrink_before_resize 1> /dev/null
+		        if ! sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) &> /dev/null; then
+				erofs_conversion && return || sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
+			fi
+		fi
+	fi
 	for img in *.img; do
 		if [[ $PARTS == *$img* ]]; then
 			lp_part_name=${img%.img}$SLOT
 			sum=$( calc $sum+$(stat -c%s $img) )
 			lp_parts+="--partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img "
 		else
-			mv $img $HOME/flashable/firmware-update
+			mv $img "$HOME"/flashable/firmware-update
 		fi
 	done
 	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts $SPARSE --output $HOME/flashable/super.img"
@@ -332,7 +391,7 @@ pack() {
 }
 
 flashable_package() {
-	cd $HOME/flashable
+	cd "$HOME"/flashable
 	echo -e "Compressing super image because it is too large\n"
 	pigz -f -q -1 super.img || { echo "Cannot compress super.img because of an issue"; exit 1; }
 	updater_script=META-INF/com/google/android/update-binary
@@ -369,89 +428,98 @@ package_extract_file() {
 }
 
 project_structure() {
-	rm -rf extracted flashable tmp
+	rm -rf extracted flashable tmp tmp2
 	mkdir -p \
 		flashable/META-INF/com/google/android/\
 		flashable/firmware-update\
 		extracted\
-		tmp
+		tmp\
+		tmp2
 }
 
 recovery_resize() {
 	shrink_before_resize 
-	sh $HOME/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
+	sh "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
 	space=$(cat empty_space)
 	add_size=$( calc $space/$(wc -w <<< "$PARTS") )
-	echo "Expanding partitions"
+	echo -e "Expanding partitions\n"
 	for img in $PARTS; do
 		[[ $space == 1 ]] && {
 			echo "Partitions exceed the super block size, cannot continue"
 			exit 1
 	       	}
-		sh $HOME/pay2sup_helper.sh expand $img ${add_size:-0} 1> /dev/null
+		sh "$HOME"/pay2sup_helper.sh expand $img ${add_size:-0} 1> /dev/null
 	done
 }
 
 recovery() {
+	trap "cleanup; rm -rf $HOME/bin" EXIT
+	[[ -f $LOG_FILE ]] && rm $LOG_FILE
 	ROM=/dev/block/by-name/super
 	DFE=1
-	SPARSE="--sparse"
-	chmod +x -R $HOME/bin
-	project_structure
-	get_os_type
-	super_extract 2> $LOG_FILE
-	get_super_size 2>> $LOG_FILE
-	get_partitions 2>> $LOG_FILE
-	read_write 2>> $LOG_FILE
-	recovery_resize 2>> $LOG_FILE
-	pack 2>> $LOG_FILE
-	if [[ $IN_RECOVERY == 1 ]]; then
-		echo "Moving super image to $OUT, you can flash it in recovery from there"
-		mv $HOME/flashable/super.img $OUT
-	else
-		echo "Flashing super image..."
-		simg2img $HOME/flashable/super.img /dev/block/by-name/super
-	fi
-	cleanup
+	[[ $NOT_IN_RECOVERY != 1 ]] && SPARSE="--sparse"
+	chmod +x -R "$HOME"/bin
+	{
+		project_structure
+		get_os_type
+		get_super_size
+		super_extract
+		get_partitions
+		read_write
+		recovery_resize
+		pack
+		if [[ $NOT_IN_RECOVERY == 1 ]]; then
+			rm -rf "$HOME"/extracted
+			flashable_package
+		else
+			echo "Flashing super image..."
+			simg2img "$HOME"/flashable/super.img /dev/block/by-name/super
+		fi
+		cleanup
+	} 2>> "$LOG_FILE"
 }
 
 main() {
+	[[ -f $LOG_FILE ]] && rm "$LOG_FILE"
 	ROM=$1
-	get_os_type 2>> $LOG_FILE
-	toolchain_check 2>> $LOG_FILE
+	{ get_os_type; toolchain_check; } 2>> "$LOG_FILE"
 	[[ -z $CONTINUE ]] && {
-		if [[ -z $ROM ]] || [[ ! -f $ROM ]] && [[ ! -b $ROM ]]; then 
+		cleanup
+		if [[ -z $ROM ]] || [[ ! -f $ROM ]] && [[ ! -b $ROM ]]; then
 			echo "You need to specify a valid ROM file or super block first"
 		       	exit 1
 		fi
 		project_structure
-		case $ROM in
-			*.bin) payload_extract 2>> $LOG_FILE;;
-			*.img|/dev/block/by-name/super) super_extract 2>> $LOG_FILE;;
+		case "$ROM" in
+			*.bin) payload_extract 2>> "$LOG_FILE";;
+			*.img|/dev/block/by-name/super) super_extract 2>> "$LOG_FILE";;
 			*)
-				if 7z l $ROM 2> /dev/null | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
-					super_extract 2>> $LOG_FILE
-				elif 7z l $ROM 2> /dev/null | grep -q payload.bin &> /dev/null; then
-					payload_extract 2>> $LOG_FILE
-				elif [[ -b $ROM ]]; then
-					super_extract 2>> $LOG_FILE
+				if 7z l "$ROM" 2> /dev/null | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
+					super_extract 2>> "$LOG_FILE"
+				elif 7z l "$ROM" 2> /dev/null | grep -q payload.bin &> /dev/null; then
+					payload_extract 2>> "$LOG_FILE"
+				elif [[ -b "$ROM" ]]; then
+					super_extract 2>> "$LOG_FILE"
 				else
 					echo "ROM is not supported"
 					exit
 				fi
 				;;
 		esac
-	} || cd $HOME/extracted
-	get_super_size 2>> $LOG_FILE
-	get_partitions 2>> $LOG_FILE
-	get_read_write_state
-	[[ $GRANT_RW == 1 ]] && read_write 2>> $LOG_FILE
-	[[ $RESIZE == 1 ]] && resize 2>> $LOG_FILE
-	get_read_write_state
-	pack 2>> $LOG_FILE
-	flashable_package 2>> $LOG_FILE
-	cleanup
-	exit
+	} || cd "$HOME"/extracted
+	{
+		get_super_size
+		get_partitions
+		get_read_write_state
+		[[ $GRANT_RW == 1 ]] && read_write
+		[[ $RESIZE == 1 ]] && resize 
+		[[ $GRANT_RW == 1 || $READ_ONLY == 0 ]] && [[ -d /etc/selinux ]] && echo -e "Preserving SELINUX contexts...\n" && sh "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
+		get_read_write_state
+		pack
+		flashable_package
+		cleanup
+		exit
+	} 2>> "$LOG_FILE"
 }
 
 help_me() {
@@ -474,8 +542,8 @@ OPTION 2: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
 Note that --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use payload.zip|.bin and --continue flags mixed with together. They are mutually exclusive.
 "
 }
-[[ -z $@ ]] && help_me | head -n4 && exit
 
+[[ -z $* ]] && help_me | head -n4 && exit
 
 for _ in "$@"; do
 	case $1 in
@@ -505,24 +573,18 @@ for _ in "$@"; do
 			help_me 
 			exit;;
 		"-c"|"--continue")
-			[[ -f $LOG_FILE ]] && rm $LOG_FILE
-			if [[ ! -d $HOME/extracted ]] || ! ls $HOME/extracted | grep -q ".img"; then
+			if [[ ! -d "$HOME"/extracted ]] || ! ls "$HOME"/extracted | grep -q ".img"; then
 				echo "Cannot continue because source files do not exist" 
 				exit 1
 			fi
 			export CONTINUE=1
-			main;;
-		*)
-			main "$(realpath $1 2> /dev/null)"
-			exit;;
-		"")
-			help_me
-			echo "You need to enter the necessary parameters"
-			exit;;
+			main;;	
 		-*)
 			help_me
 			echo "$1 is not a valid command"
 			exit;;
+		*)
+			main "$(realpath $1 2> /dev/null)";;
 
 	esac
 done

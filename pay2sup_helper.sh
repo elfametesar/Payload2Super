@@ -1,36 +1,25 @@
 #!/bin/env sh
 
 trap "{ umount $TEMP || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
-calc(){ awk 'BEGIN{ print int('"$1"') }'; }
+calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 shrink() {
 	for img in "$@"; do
-		loop=$(losetup -f)
-		losetup $loop $img
-		mount $loop $TEMP || { echo -e "There was a problem shrinking $img, skipping\n" 1>&2; continue; }
-		total_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $2}')
-        	space_size=$($BUSYBOX df -B1 $TEMP | awk 'END{print $4}')
-		umount $TEMP || umount -l $TEMP
-		losetup -D
-		[[ $space_size == 0 ]] && continue
-		shrink_space=$(calc $total_size-$space_size)
-		shrink_space=$(calc $shrink_space/1024/1024)
-		resize2fs -f $img ${shrink_space}M 2> /dev/null || while true; do
-			(( count++ ))
-			shrink_space=$( calc "$shrink_space+5" )
-			resize2fs -f $img ${shrink_space}M 2> /dev/null && break
-			(( count == 30 )) && break
-		done
-		e2fsck -fy $img
+		total_size=$(dumpe2fs -h "$img" | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
+        	used_size=$(dumpe2fs -h "$img" | awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print '$total_size'-count*size}')
+		used_size=$(( used_size/1024/1024))M
+		resize2fs -f "$img" $used_size 2> /dev/null 
+		resize2fs -f -M "$img" 2> /dev/null 
+		e2fsck -fy "$img"
 	done
 }
 
 get_sizes() {
 	super_size=$( calc $1/1024/1024 )
 	for img in $PARTS; do
-		size=$(stat -c%s $img)
+		size=$(dumpe2fs -h $img | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
 		size=$( calc $size/1024/1024 )
-		echo -e "${img%.img/}\t${size}M"
+		echo -e "${img%.img}\t${size}M"
 		sum=$( calc $sum+$size )
 	done
 	echo -e "\nSuper block size is ${super_size}M.\n"
@@ -65,9 +54,16 @@ mount_vendor() {
 		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
 }
 
+unmount_vendor() {
+	umount "$TEMP" || umount -l "$TEMP"
+	losetup -D
+}
+
 remove_overlay() {
 	mount_vendor
-	sed -i 's/^overlay/# /' $TEMP/etc/fstab*
+	sed -i 's/^overlay/# overlay/' $TEMP/etc/fstab*
+	unmount_vendor
+	shrink $vendor 1> /dev/null
 }
 
 disable_encryption() {
@@ -81,11 +77,38 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' $TEMP/etc/fstab*
-        losetup -D
-	fallocate -l $( calc $(stat -c%s $vendor)-52428800) $vendor
-	resize2fs -f $vendor &> /dev/null
+	unmount_vendor
 	echo -e "Android file encryption system has been disabled succesfully\n"
 	sleep 2
+}
+
+restore_secontext() {
+	for img in $PARTS; do
+		[[ -f "$HOME/${img%.img}_context" && -s "$HOME/${img%.img}_context" ]] || continue
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount -o rw $loop $TEMP || continue
+		
+		while read line; do
+			[[ -z $line ]] && break
+			context=$(grep "$line" $HOME/${img%.img}_context)
+			chcon -h $(echo "$context") 2> /dev/null
+		done <<< "$(find "$TEMP" -exec ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
+		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
+		losetup -D
+	done
+}
+
+preserve_secontext() {
+	for img in $PARTS; do
+		[[ -f "$HOME/${img%.img}_context" && -s "$HOME/${img%.img}_context" ]] && continue 
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount -o ro $loop $TEMP || continue
+		find $TEMP -exec ls -d -Z {} + > $HOME/${img%.img}_context
+		{ umount $TEMP || umount -l $TEMP; } 2> /dev/null
+		losetup -D
+	done
 }
 
 case $1 in
@@ -94,4 +117,6 @@ case $1 in
 	"expand") add_space $2 $3;;
 	"dfe") disable_encryption;;
 	"remove_overlay") remove_overlay;;
+	"preserve_secontext") preserve_secontext;;
+	"restore_secontext") restore_secontext;;
 esac
