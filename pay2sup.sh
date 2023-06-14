@@ -27,6 +27,7 @@ trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null
 TOOLCHAIN=(make_ext4fs \
 	mkfs.erofs \
 	dumpe2fs \
+	busybox \
 	pigz \
 	7z \
 	dump.erofs \
@@ -45,7 +46,7 @@ toolchain_check() {
 			continue
 		else
 			[[ $tool == adb && $LINUX == 0 ]] && continue
-			[[ $tool == make_ext4fs && $LINUX == 1 ]] && continue
+			[[ $tool == make_ext4fs || $tool == busybox && $LINUX == 1 ]] && continue
 			missing+=($tool)
 		fi
 	done
@@ -67,6 +68,7 @@ get_os_type() {
 			export OUT=~;;
 		*)
 			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
+			BUSYBOX=busybox
 	esac	
 }
 
@@ -130,7 +132,7 @@ rebuild() {
 	loop=$(losetup -f)
 	losetup $loop $1
 	mount -o ro $loop "$TEMP" || { losetup -D; return; }
-	cp -ra "$TEMP"/* "$TEMP2"/
+	$BUSYBOX cp -rf -c "$TEMP"/* "$TEMP2"/
 	size=$(du -sm | cut -f1)
 	find "$TEMP" -exec ls -d -Z {} + > $HOME/${1%.img}_context
 	context=$(find "$TEMP" -exec ls -d -Z {} +)
