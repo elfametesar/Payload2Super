@@ -5,8 +5,8 @@ calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 shrink() {
 	for img in "$@"; do
-		total_size=$(dumpe2fs -h "$img" | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
-        	used_size=$(dumpe2fs -h "$img" | awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print '$total_size'-count*size}')
+		total_size=$(tune2fs -l "$img" | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
+        	used_size=$(tune2fs -l "$img" | awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print '$total_size'-count*size}')
 		used_size=$(( used_size/1024/1024))M
 		resize2fs -f "$img" $used_size 2> /dev/null 
 		resize2fs -f -M "$img" 2> /dev/null 
@@ -17,7 +17,7 @@ shrink() {
 get_sizes() {
 	super_size=$( calc $1/1024/1024 )
 	for img in $PARTS; do
-		size=$(dumpe2fs -h $img | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
+		size=$(tune2fs -l $img | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
 		size=$( calc $size/1024/1024 )
 		echo -e "${img%.img}\t${size}M"
 		sum=$( calc $sum+$size )
