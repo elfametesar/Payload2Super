@@ -93,7 +93,7 @@ get_partitions() {
 }
 
 toolchain_download() {
-	[[ -d "$HOME"/bin ]] && return
+	[[ -d "$HOME"/bin ]] && chmod +x -R $HOME/bin && return
 	if [[ $LINUX == 0 ]]; then
 		   URL="https://github.com/elfametesar/uploads/raw/main/toolchain_android_arm64.tar"
 	else
