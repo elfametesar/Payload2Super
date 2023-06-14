@@ -1,6 +1,6 @@
 #!/bin/env sh
 
-trap "{ umount $TEMP || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 shrink() {
@@ -88,6 +88,26 @@ disable_encryption() {
 	sleep 2
 }
 
+kernel_patch() {
+	mkdir "$HOME"/kernel_patching
+	cd "$HOME"/kernel_patching
+	image="$1"
+	magiskboot unpack $image || exit 1
+	fstab_path="$(7z l ramdisk.cpio | awk '/(\/)fstab*/ {print $4}')"
+	[[ -z $fstab_path ]] && exit
+	7z e -y ramdisk.cpio $fstab_path || exit 1
+	sed -i "s/erofs/ext4/g" fstab*
+	for fstab in fstab*; do
+		fstab_path_incpio="${fstab_path}$fstab"
+		magiskboot cpio ramdisk.cpio "add 0777 $fstab_path_incpio $fstab"
+		rm $fstab
+		unset fstab_path_incpio
+	done
+	magiskboot repack "$image" "${image##*/}"
+	mv "${image##*/}" "$image"
+	rm -rf "$HOME"/kernel_patching
+}
+
 restore_secontext() {
 	for img in $PARTS; do
 		[[ -f $HOME/${img%.img}_context && -s $HOME/${img%.img}_context ]] || continue
@@ -125,4 +145,5 @@ case $1 in
 	"remove_overlay") remove_overlay;;
 	"preserve_secontext") preserve_secontext;;
 	"restore_secontext") restore_secontext;;
+	"patch_kernel") kernel_patch $2;;
 esac

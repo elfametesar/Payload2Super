@@ -26,6 +26,7 @@ trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null
 
 TOOLCHAIN=(make_ext4fs \
 	mkfs.erofs \
+	magiskboot \
 	dumpe2fs \
 	busybox \
 	pigz \
@@ -394,6 +395,24 @@ pack() {
 
 }
 
+patch_kernel() {
+	[[ $BACK_TO_EROFS == 1 ]] && return
+	if [[ ! -f boot.img && ! -f vendor_boot.img ]]; then
+		if [[ $LINUX == 0 ]]; then
+			dd if=/dev/block/by-name/boot$SLOT of=boot.img
+			dd if=/dev/block/by-name/vendor_boot$SLOT of=vendor_boot.img
+		else
+			echo -e "You have no kernel files in workspace for program to patch for EXT4. Provide the program kernel files by putting them in $PWD or program will have the skip this step. Press enter to continue.\n"
+			read
+			[[ -f boot.img && -f vendor_boot.img ]] || return
+		fi
+	fi
+	echo -e "Patching the kernel for EXT4 support..\n"
+	for img in boot.img vendor_boot.img; do
+		sh $HOME/pay2sup_helper.sh patch_kernel "$PWD/$img" 1> /dev/null || { echo -e "Cannot patch $img for EXT4 because of a problem, skipping...\n"; continue; }
+	done
+}
+
 flashable_package() {
 	cd "$HOME"/flashable
 	echo -e "Compressing super image because it is too large\n"
@@ -471,6 +490,7 @@ recovery() {
 		get_partitions
 		read_write
 		recovery_resize
+		patch_kernel
 		pack
 		if [[ $NOT_IN_RECOVERY == 1 ]]; then
 			rm -rf "$HOME"/extracted
@@ -478,6 +498,10 @@ recovery() {
 		else
 			echo "Flashing super image..."
 			simg2img "$HOME"/flashable/super.img /dev/block/by-name/super
+			echo "Flashing boot image..."
+			dd if="$HOME"/extracted/boot.img of=/dev/block/by-name/boot$SLOT
+			echo "Flashing vendor_boot image..."
+			dd if="$HOME"/extracted/vendor_boot.img of=/dev/block/by-name/vendor_boot$SLOT
 		fi
 		cleanup
 	} 2>> "$LOG_FILE"
@@ -519,6 +543,7 @@ main() {
 		[[ $RESIZE == 1 ]] && resize 
 		[[ $GRANT_RW == 1 || $READ_ONLY == 0 ]] && [[ -d /etc/selinux ]] && echo -e "Preserving SELINUX contexts...\n" && sh "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
 		get_read_write_state
+		patch_kernel
 		pack
 		flashable_package
 		cleanup
