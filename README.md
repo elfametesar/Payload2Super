@@ -86,3 +86,7 @@ And finally in the end, specify your ROM path:
 sh pay2sup.sh -rw -r -dfe -t <corenumber> <path-to-ROM>
 ```
 
+# Tested On
+- Motorola G20
+- POCO F3
+- Redmi Note 10 (Mojito)
