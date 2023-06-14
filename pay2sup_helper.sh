@@ -111,7 +111,7 @@ preserve_secontext() {
 		loop=$(losetup -f)
 		losetup $loop $img
 		mount -o ro $loop "$TEMP" || continue
-		find "$TEMP" -exec ls -d -Z {} + > "$HOME"/${img%.img}_context
+		find "$TEMP" -exec $BUSYBOX ls -d -Z {} + > "$HOME"/${img%.img}_context
 		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done
