@@ -27,7 +27,6 @@ get_sizes() {
 		echo -e "\nPartition sizes exceed the super block size. Program cannot continue. You need to debloat the images you can find in $PWD or convert back to EROFS in order to continue.\n" 1>&2
 		exit 1
 	fi
-	echo
 	echo "Free space you can distribute is $( calc $super_size-$sum )Mb"
 	echo
 	echo $( calc $super_size-$sum ) > empty_space
@@ -69,6 +68,7 @@ remove_overlay() {
 disable_encryption() {
 	mount_vendor
 	echo -e "Disabling Android file encryption system...\n"
+	fstab_contexts="$($BUSYBOX ls -Z $TEMP/etc/fstab*)"
 	sed -i 's|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
 		s|,fileencryption=aes-256-xts:aes-256-cts:v2+emmc_optimized+wrappedkey_v0||;
                	s|,metadata_encryption=aes-256-xts:wrappedkey_v0||;
@@ -77,6 +77,9 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
+	for fstab_context in "$fstab_contexts"; do
+		chcon $fstab_context
+	done
 	unmount_vendor
 	echo -e "Android file encryption system has been disabled succesfully\n"
 	sleep 2
@@ -86,14 +89,14 @@ restore_secontext() {
 	for img in $PARTS; do
 		[[ -f $HOME/${img%.img}_context && -s $HOME/${img%.img}_context ]] || continue
 		loop=$(losetup -f)
-		losetup $loop $img
+		losetup $loop "$img"
 		mount -o rw $loop "$TEMP" || continue
-		
 		while read line; do
 			[[ -z $line ]] && break
-			context=$(grep "$line" "$HOME"/${img%.img}_context)
-			chcon -h $(echo "$context") 2> /dev/null
-		done <<< "$(find $TEMP -exec ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
+			context="$(grep $line$ $HOME/${img%.img}_context)"
+			[[ $context == "" ]] && continue
+			chcon -h $context
+		done <<< "$(find $TEMP -exec $BUSYBOX ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
 		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done
