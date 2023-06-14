@@ -51,6 +51,7 @@ mount_vendor() {
 	losetup $loop "$vendor"
 	mount $loop "$TEMP" || \
 		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
+	fstab_contexts="$($BUSYBOX ls -Z $TEMP/etc/fstab*)"
 }
 
 unmount_vendor() {
@@ -61,6 +62,9 @@ unmount_vendor() {
 remove_overlay() {
 	mount_vendor
 	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
+	for fstab_context in "$fstab_contexts"; do
+		chcon $fstab_context
+	done
 	unmount_vendor
 	shrink "$vendor" 1> /dev/null
 }
@@ -68,7 +72,6 @@ remove_overlay() {
 disable_encryption() {
 	mount_vendor
 	echo -e "Disabling Android file encryption system...\n"
-	fstab_contexts="$($BUSYBOX ls -Z $TEMP/etc/fstab*)"
 	sed -i 's|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
 		s|,fileencryption=aes-256-xts:aes-256-cts:v2+emmc_optimized+wrappedkey_v0||;
                	s|,metadata_encryption=aes-256-xts:wrappedkey_v0||;
