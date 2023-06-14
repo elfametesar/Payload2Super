@@ -1,6 +1,15 @@
 #!/bin/env sh
 
 trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
+
+failure() {
+  local lineno=$1
+  local msg=$2
+  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
+}
+
+trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 shrink() {
