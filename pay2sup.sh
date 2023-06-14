@@ -68,7 +68,7 @@ get_os_type() {
 			export OUT=~;;
 		*)
 			[[ -d /sdcard && ! -d $OUT ]] && mkdir $OUT
-			BUSYBOX=busybox
+			export BUSYBOX=busybox
 	esac	
 }
 
@@ -356,6 +356,10 @@ pack() {
 	[[ $RECOVERY == 0 ]] && {
 		echo -en "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue. If you don't have SELINUX installed in your system, be careful not to replace system files as it will break SELINUX contexts."
 		read
+		while mountpoint -q "$TEMP" || mountpoint -q $TEMP2; do
+			umount "$TEMP" || umount -l "$TEMP"
+			umount "$TEMP2" || umount -l "$TEMP2"
+		done
 		echo
 		[[ -d /etc/selinux && $READ_ONLY == 0 ]] && echo -e "Restoring SELINUX contexts...\n" && sh "$HOME"/pay2sup_helper.sh restore_secontext 2>> "$LOG_FILE" 1> /dev/null
 	}
