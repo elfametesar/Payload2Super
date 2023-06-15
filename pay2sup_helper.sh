@@ -71,7 +71,7 @@ unmount_vendor() {
 remove_overlay() {
 	mount_vendor
 	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
-	for fstab_context in $fstab_contexts; do
+	for fstab_context in "$fstab_contexts"; do
 		chcon $fstab_context
 	done
 	unmount_vendor
@@ -89,7 +89,7 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
-	for fstab_context in $fstab_contexts; do
+	for fstab_context in "$fstab_contexts"; do
 		chcon $fstab_context
 	done
 	unmount_vendor
@@ -102,7 +102,7 @@ kernel_patch() {
 	cd "$HOME"/kernel_patching
 	image="$1"
 	magiskboot unpack $image || exit 1
-	magiskboot hexpatch ramdisk.cpio "20202065726F6673" "65787434"
+	magiskboot hexpatch ramdisk.cpio "20202065726F6673" "20202065787434"
 	magiskboot repack "$image" "${image##*/}"
 	mv "${image##*/}" "$image"
 	rm -rf "$HOME"/kernel_patching
