@@ -3,8 +3,8 @@
 trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
 
 failure() {
-  local lineno=$1
-  local msg=$2
+  lineno=$1
+  msg=$2
   echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
 }
 
@@ -28,12 +28,14 @@ get_sizes() {
 	for img in $PARTS; do
 		size=$(tune2fs -l $img | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
 		size=$( calc $size/1024/1024 )
-		echo -e "${img%.img}\t${size}M"
+		printf "%s\t%s\n" "${img%.img}" "${size}M"
 		sum=$( calc $sum+$size )
 	done
-	echo -e "\nSuper block size is ${super_size}M.\n"
-	if (( super_size-sum < 0 )); then
-		echo -e "\nPartition sizes exceed the super block size. Program cannot continue. You need to debloat the images you can find in $PWD or convert back to EROFS in order to continue.\n" 1>&2
+	echo "\nSuper block size is ${super_size}M."
+	echo
+	if [ $((super_size-sum)) -lt 0 ]; then
+		echo
+		echo "Partition sizes exceed the super block size."
 		exit 1
 	fi
 	echo "Free space you can distribute is $( calc $super_size-$sum )Mb"
@@ -42,14 +44,14 @@ get_sizes() {
 }
 
 add_space() {
-	if [[ $PARTS == *$1* ]]; then
+	case $PARTS in *$1*)
 		bytes=$(stat -c%s $1)
 		megabytes=$( calc $bytes/1024/1024 )
 		total=$( calc $megabytes+$2 )
 		echo "Size of the $1 was ${megabytes}Mb"
-		fallocate -l "${total}M" $1 && echo -e "New size of the ${1%.img} is $( calc $(stat -c%s $1)/1024/1024 )Mb\n" || echo "Something went wrong"
-		resize2fs -f $1 1> /dev/null
-	fi
+		fallocate -l "${total}M" $1 && echo "New size of the ${1%.img} is $( calc $(stat -c%s $1)/1024/1024 )Mb" && echo || echo "Something went wrong"
+		resize2fs -f $1 1> /dev/null;;
+	esac
 }
 
 mount_vendor() {
@@ -59,8 +61,8 @@ mount_vendor() {
 	loop=$(losetup -f)
 	losetup $loop "$vendor"
 	mount $loop "$TEMP" || \
-		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
-	fstab_contexts="$($BUSYBOX ls -Z $TEMP/etc/fstab*)"
+		{ echo "Program cannot mount vendor, therefore cannot disable file encryption."; echo; return 1; }
+	fstab_contexts="$($TOYBOX ls -Z $TEMP/etc/fstab*)"
 }
 
 unmount_vendor() {
@@ -71,8 +73,8 @@ unmount_vendor() {
 remove_overlay() {
 	mount_vendor
 	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
-	for fstab_context in $fstab_contexts; do
-		chcon $fstab_context
+	echo "$fstab_contexts" | while read context file; do
+		chcon $context $file
 	done
 	unmount_vendor
 	shrink "$vendor" 1> /dev/null
@@ -80,7 +82,8 @@ remove_overlay() {
 
 disable_encryption() {
 	mount_vendor
-	echo -e "Disabling Android file encryption system...\n"
+	echo "Disabling Android file encryption system..."
+	echo
 	sed -i 's|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
 		s|,fileencryption=aes-256-xts:aes-256-cts:v2+emmc_optimized+wrappedkey_v0||;
                	s|,metadata_encryption=aes-256-xts:wrappedkey_v0||;
@@ -89,11 +92,12 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
-	for fstab_context in $fstab_contexts; do
-		chcon $fstab_context
+	echo "$fstab_contexts" | while read context file; do
+		chcon $context $file
 	done
 	unmount_vendor
-	echo -e "Android file encryption system has been disabled succesfully\n"
+	echo "Android file encryption system has been disabled succesfully"
+	echo
 	sleep 2
 }
 
@@ -110,16 +114,17 @@ kernel_patch() {
 
 restore_secontext() {
 	for img in $PARTS; do
-		[[ -f $HOME/${img%.img}_context && -s $HOME/${img%.img}_context ]] || continue
+		[ -f "$HOME/${img%.img}_context" ] && [ -s "$HOME/${img%.img}_context" ] || continue
 		loop=$(losetup -f)
 		losetup $loop "$img"
 		mount -o rw $loop "$TEMP" || continue
-		while read line; do
-			[[ -z $line ]] && break
+		find $TEMP -exec $TOYBOX ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}' | while read line; do
+			[ -z "$line" ] && break
+			case "$line" in *\[) line="${line%[}\[";; esac
 			context="$(grep $line$ $HOME/${img%.img}_context)"
-			[[ $context == "" ]] && continue
+			[ -z "$context" ] && continue
 			chcon -h $context
-		done <<< "$(find $TEMP -exec $BUSYBOX ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}')"
+		done 
 		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done
@@ -127,11 +132,11 @@ restore_secontext() {
 
 preserve_secontext() {
 	for img in $PARTS; do
-		[[ -f $HOME/${img%.img}_context && -s $HOME/${img%.img}_context ]] && continue 
+		[ -f "$HOME/${img%.img}_context" ] && [ -s "$HOME/${img%.img}_context" ] && continue 
 		loop=$(losetup -f)
 		losetup $loop $img
 		mount -o ro $loop "$TEMP" || continue
-		find "$TEMP" -exec $BUSYBOX ls -d -Z {} + > "$HOME"/${img%.img}_context
+		find "$TEMP" -exec $TOYBOX ls -d -Z {} + > "$HOME"/${img%.img}_context
 		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 		losetup -D
 	done

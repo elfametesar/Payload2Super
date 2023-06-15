@@ -20,8 +20,6 @@ erofs_converter_by_mount() {
 	mount ${part_name}_ext4.img "$TEMP2"
 	chcon -h $(echo ${root_context})
 	cp -ra "$TEMP"/* "$TEMP2"
-	total_size=$(df -B1 --output=size "$TEMP2" | grep -o "^[0-9]*")
-	space_size=$(df -B1 --output=avail "$TEMP2" | grep -o "[0-9]*")
 	mv ${part_name}_ext4.img $1
 	umount "$TEMP" "$TEMP2"
 	sh $HOME/pay2sup_helper.sh shrink $1 || true
@@ -29,7 +27,7 @@ erofs_converter_by_mount() {
 
 case $1 in
 	convert)
-		if [[ $LINUX == 1 ]]; then
+		if [ $LINUX -eq 1 ]; then
 		    erofs_converter_by_mount $2
 		else
 		    erofs_converter_by_extract $2
