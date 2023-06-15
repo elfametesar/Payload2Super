@@ -90,9 +90,9 @@ get_partitions() {
 	fi
 	[ -z "$FSTABS" ] && FSTABS="$(cat $TEMP/etc/fstab*)"
 	[ -z "$FSTABS" ] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
-	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ && !/\/data|\/metadata|\/boot|\/vendor_boot|\/recovery|\/init_boot|\/dtbo|\/cache|\/misc|\/oem|\/persist/ && $2 ~ /^\/[a-z]*(_|[a-z])*[^/]$/ { gsub("/",""); print $2}')
+	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ && !/\/data|\/metadata|\/boot|\/vendor_boot|\/recovery|\/init_boot|\/dtbo|\/cache|\/misc|\/oem|\/persist/ && $2 ~ /^\/[a-z]*(_|[a-z])*[^/]$/ { gsub("/",""); printf "%s.img ", $2}')
 	for img in "$HOME"/extracted/*.img; do
-		case "$PART_LIST" in *${img##*/}*) export PARTS="$PARTS ${img##*/} "; esac
+		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done
 	umount "$TEMP" || umount -l "$TEMP"
 }
