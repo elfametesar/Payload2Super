@@ -106,7 +106,7 @@ toolchain_download() {
 		   URL="https://github.com/elfametesar/uploads/raw/main/toolchain_linux_x64.tar"
 	fi	
 	echo "Downloading toolchain"
-	curl -L $URL -o ${URL##*/} 1> /dev/null
+	curl -k -L $URL -o ${URL##*/} 1> /dev/null
 	echo -e "Extracting toolchain\n"
 	mkdir "$HOME"/bin
 	tar xf ${URL##*/} -C "$HOME"/bin/
