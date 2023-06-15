@@ -14,10 +14,16 @@ export TEMP="$HOME"/tmp
 export TEMP2="$HOME"/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
-
 trap "exit" INT
 trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
 
+failure() {
+  local lineno=$1
+  local msg=$2
+  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
+}
+
+trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
 
 [ $(id -u) -eq 0 ] || {
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
@@ -26,7 +32,7 @@ trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null
 
 TOOLCHAIN=(make_ext4fs \
 	mkfs.erofs \
-	dumpe2fs \
+	magiskboot \
 	busybox \
 	pigz \
 	7z \
@@ -394,6 +400,24 @@ pack() {
 
 }
 
+patch_kernel() {
+	[[ $BACK_TO_EROFS == 1 ]] && return
+	if [[ ! -f boot.img && ! -f vendor_boot.img ]]; then
+		if [[ $LINUX == 0 ]]; then
+			dd if=/dev/block/by-name/boot$SLOT of=boot.img
+			dd if=/dev/block/by-name/vendor_boot$SLOT of=vendor_boot.img
+		else
+			echo -e "You have no kernel files in workspace for program to patch for EXT4. Provide the program kernel files by putting them in $PWD or program will have the skip this step. Press enter to continue.\n"
+			read
+			[[ -f boot.img && -f vendor_boot.img ]] || return
+		fi
+	fi
+	echo -e "Patching the kernel for EXT4 support..\n"
+	for img in boot.img vendor_boot.img; do
+		sh $HOME/pay2sup_helper.sh patch_kernel "$PWD/$img" 1> /dev/null || { echo -e "Cannot patch $img for EXT4 because of a problem, skipping...\n"; continue; }
+	done
+}
+
 flashable_package() {
 	cd "$HOME"/flashable
 	echo -e "Compressing super image because it is too large\n"
@@ -471,6 +495,7 @@ recovery() {
 		get_partitions
 		read_write
 		recovery_resize
+		patch_kernel
 		pack
 		if [[ $NOT_IN_RECOVERY == 1 ]]; then
 			rm -rf "$HOME"/extracted
@@ -478,6 +503,10 @@ recovery() {
 		else
 			echo "Flashing super image..."
 			simg2img "$HOME"/flashable/super.img /dev/block/by-name/super
+			echo "Flashing boot image..."
+			dd if="$HOME"/extracted/boot.img of=/dev/block/by-name/boot$SLOT
+			echo "Flashing vendor_boot image..."
+			dd if="$HOME"/extracted/vendor_boot.img of=/dev/block/by-name/vendor_boot$SLOT
 		fi
 		cleanup
 	} 2>> "$LOG_FILE"
@@ -519,6 +548,7 @@ main() {
 		[[ $RESIZE == 1 ]] && resize 
 		[[ $GRANT_RW == 1 || $READ_ONLY == 0 ]] && [[ -d /etc/selinux ]] && echo -e "Preserving SELINUX contexts...\n" && sh "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
 		get_read_write_state
+		patch_kernel
 		pack
 		flashable_package
 		cleanup
@@ -531,17 +561,17 @@ help_me() {
 OPTION 1: $0 [-rw|--read-write] [-r|--resize] payload.bin|super.img|rom.zip|/dev/block/by-name/super
 OPTION 2: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
 
--rw | --read-write          = Grants write access to all the partitions.
+-rw  | --read-write         = Grants write access to all the partitions.
 
--r  | --resize	            = Resizes partitions based on user input. User input will be asked during the program.
+-r   | --resize	            = Resizes partitions based on user input. User input will be asked during the program.
 
 -dfe | --disable-encryption = Disables Android's file encryption. This parameter requires read&write partitions.
 
--t  | --thread	            = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
+-t   | --thread	            = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
 
--c  | --continue            = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
+-c   | --continue           = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
 
--h  | --help	            = Prints out this help message.
+-h   | --help	            = Prints out this help message.
 
 Note that --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use payload.zip|.bin and --continue flags mixed with together. They are mutually exclusive.
 "

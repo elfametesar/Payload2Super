@@ -1,6 +1,15 @@
 #!/bin/env sh
 
-trap "{ umount $TEMP || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
+
+failure() {
+  local lineno=$1
+  local msg=$2
+  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
+}
+
+trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 shrink() {
@@ -43,49 +52,38 @@ add_space() {
 	fi
 }
 
-mount_vendor() {
-	vendor="$HOME"/extracted/vendor.img
-	fallocate -l $( calc $(stat -c%s "$vendor")+52428800) "$vendor"
-	resize2fs -f "$vendor" &> /dev/null
-	loop=$(losetup -f)
-	losetup $loop "$vendor"
-	mount $loop "$TEMP" || \
-		{ echo -e "Program cannot mount vendor, therefore cannot disable file encryption.\n"; return 1; }
-	fstab_contexts="$($BUSYBOX ls -Z $TEMP/etc/fstab*)"
-}
-
-unmount_vendor() {
-	umount "$TEMP" || umount -l "$TEMP"
-	losetup -D
-}
-
 remove_overlay() {
-	mount_vendor
-	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
-	for fstab_context in "$fstab_contexts"; do
-		chcon $fstab_context
-	done
-	unmount_vendor
-	shrink "$vendor" 1> /dev/null
+	magiskboot hexpatch "$HOME"/extracted/vendor.img "0A6F7665726C6179" "0A2320202020206f7665726c6179"
 }
 
 disable_encryption() {
-	mount_vendor
 	echo -e "Disabling Android file encryption system...\n"
-	sed -i 's|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
-		s|,fileencryption=aes-256-xts:aes-256-cts:v2+emmc_optimized+wrappedkey_v0||;
-               	s|,metadata_encryption=aes-256-xts:wrappedkey_v0||;
-               	s|,keydirectory=/metadata/vold/metadata_encryption||;
-               	s|,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized||;
-               	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
-               	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
-               	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
-	for fstab_context in "$fstab_contexts"; do
-		chcon $fstab_context
+	encryption_hexes="2C66696C65656E6372797074696F6E3D6165732D3235362D7874733A6165732D3235362D6374733A76322B696E6C696E6563727970745F6F7074696D697A65642B777261707065646B65795F7630\
+		2c66696c65656e6372797074696f6e3d6165732d3235362d7874733a6165732d3235362d6374733a76322b656d6d635f6f7074696d697a65642b777261707065646b65795f7630\
+	       	2c6d657461646174615f656e6372797074696f6e3d6165732d3235362d7874733a777261707065646b65795f7630\
+	       	2c6b65796469726563746f72793d2f6d657461646174612f766f6c642f6d657461646174615f656e6372797074696f6e\
+	       	2c66696c65656e6372797074696f6e3d6165732d3235362d7874733a6165732d3235362d6374733a76322b696e6c696e6563727970745f6f7074696d697a6564\
+	       	2c656e637279707461626c653d6165732d3235362d7874733a6165732d3235362d6374733a76322b5f6f7074696d697a6564\
+	       	2c656e637279707461626c653d6165732d3235362d7874733a6165732d3235362d6374733a76322b696e6c696e6563727970745f6f7074696d697a65642b777261707065646b65795f7630\
+	       	696e6c696e656372797074\
+	       	2c777261707065646b6579\
+	       	2c656e637279707461626c653d666f6f746572"
+	for hex in $encryption_hexes; do
+		magiskboot hexpatch "$HOME"/extracted/vendor.img $hex ""
 	done
-	unmount_vendor
 	echo -e "Android file encryption system has been disabled succesfully\n"
 	sleep 2
+}
+
+kernel_patch() {
+	mkdir "$HOME"/kernel_patching
+	cd "$HOME"/kernel_patching
+	image="$1"
+	magiskboot unpack $image || exit 1
+	magiskboot hexpatch ramdisk.cpio "20202065726F6673" "20202065787434"
+	magiskboot repack "$image" "${image##*/}"
+	mv "${image##*/}" "$image"
+	rm -rf "$HOME"/kernel_patching
 }
 
 restore_secontext() {
@@ -125,4 +123,5 @@ case $1 in
 	"remove_overlay") remove_overlay;;
 	"preserve_secontext") preserve_secontext;;
 	"restore_secontext") restore_secontext;;
+	"patch_kernel") kernel_patch $2;;
 esac
