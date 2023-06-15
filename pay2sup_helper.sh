@@ -102,16 +102,7 @@ kernel_patch() {
 	cd "$HOME"/kernel_patching
 	image="$1"
 	magiskboot unpack $image || exit 1
-	fstab_path="$(7z l ramdisk.cpio | awk '/(\/)fstab*/ {print $4}')"
-	[[ -z $fstab_path ]] && exit
-	7z e -y ramdisk.cpio $fstab_path || exit 1
-	sed -i "s/erofs/ext4/g" fstab*
-	for fstab in fstab*; do
-		fstab_path_incpio="${fstab_path}$fstab"
-		magiskboot cpio ramdisk.cpio "add 0777 $fstab_path_incpio $fstab"
-		rm $fstab
-		unset fstab_path_incpio
-	done
+	magiskboot hexpatch ramdisk.cpio "20202065726F6673" "65787434"
 	magiskboot repack "$image" "${image##*/}"
 	mv "${image##*/}" "$image"
 	rm -rf "$HOME"/kernel_patching
