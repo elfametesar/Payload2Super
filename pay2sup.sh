@@ -46,7 +46,7 @@ TOOLCHAIN="make_ext4fs \
 
 toolchain_check() {
 	[ -d "$HOME/bin" ] && chmod +x -R "$HOME"/bin || toolchain_download
-	echo "Checking the toolchain integrity\n"
+	echo "Checking the toolchain integrity"
 	echo
 	for tool in $TOOLCHAIN; do
 		if [ -f "$HOME/bin/$tool" ]; then
