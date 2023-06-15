@@ -46,7 +46,7 @@ If you wish to go back to EROFS to make partition images fit the super block, yo
 
 # To get this tool
 ```
-git clone https://github.com/elfametesar/Payload2Super
+git clone https://github.com/elfametesar/Payload2Super -b experimental
 cd Payload2Super
 ```
 # Example Usage
