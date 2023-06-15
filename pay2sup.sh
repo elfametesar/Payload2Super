@@ -33,7 +33,6 @@ trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
 TOOLCHAIN=(make_ext4fs \
 	mkfs.erofs \
 	magiskboot \
-	dumpe2fs \
 	busybox \
 	pigz \
 	7z \
