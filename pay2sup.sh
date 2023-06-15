@@ -184,12 +184,13 @@ super_extract() {
 	{ file "$ROM" | grep -q -i "archive"; } && {
 		echo "Extracting super from archive (This takes a while)"
 		echo
-		super_path="$(7z l "$ROM" | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
+		super_path="$(7z l "$ROM" | awk '/super.img/ { print $6 }')"
 		7z e -y "$ROM" "*.img" "*/*.img" "*/*/*.img" -o"$HOME"/extracted 1> /dev/null
 		7z e -y "$ROM" "${super_path}" -o"$HOME" 1> /dev/null
 		case ${super_path##*/} in 
 			*.gz) pigz -d ${super_path##*/};;
-			*) 7z e "${super_path##*/}" >/dev/null 2>&1 && rm "${super_path##*/}";;
+			*.img) :;;
+			*) 7z e -y "${super_path##*/}" >/dev/null 2>&1 && rm "${super_path##*/}";;
 		esac
 		ROM=super.img
 	}
@@ -547,6 +548,12 @@ main() {
 		case "$ROM" in
 			*.bin) payload_extract 2>> "$LOG_FILE";;
 			*.img|/dev/block/by-name/super) super_extract 2>> "$LOG_FILE";;
+			*.tgz)
+				echo "Extracting the first layer of this archive to check if it is viable"
+				echo
+				7z e -y "$ROM" -o"$HOME" >/dev/null 2>&1 || { echo "ROM is not supported"; exit 1; }
+				ROM="$(7z l $ROM | awk '/.tar/ {print $6}')"
+				super_extract 2>> "$LOG_FILE";;
 			*)
 				if 7z l "$ROM" 2> /dev/null | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
 					super_extract 2>> "$LOG_FILE"
