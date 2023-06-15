@@ -71,7 +71,7 @@ unmount_vendor() {
 remove_overlay() {
 	mount_vendor
 	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
-	for fstab_context in "$fstab_contexts"; do
+	for fstab_context in $fstab_contexts; do
 		chcon $fstab_context
 	done
 	unmount_vendor
@@ -89,7 +89,7 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+_optimized||;
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
-	for fstab_context in "$fstab_contexts"; do
+	for fstab_context in $fstab_contexts; do
 		chcon $fstab_context
 	done
 	unmount_vendor
