@@ -107,7 +107,7 @@ toolchain_download() {
 	fi	
 	echo "Downloading toolchain"
 	curl -k -L $URL -o ${URL##*/} 1> /dev/null
-	echo "Extracting toolchain\n"
+	echo "Extracting toolchain"
 	echo
 	mkdir "$HOME"/bin
 	tar xf ${URL##*/} -C "$HOME"/bin/
@@ -166,7 +166,7 @@ erofs_conversion() {
 		loop=$(losetup -f)
 		losetup $loop $img
 		mount $loop "$TEMP" || { echo "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping."; echo; continue; }
-		echo "Converting ${img%*.img} to EROFS\n"
+		echo "Converting ${img%*.img} to EROFS"
 		echo
 		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img "$TEMP" 1> /dev/null
 		{ umount "$TEMP" || umount -l "$TEMP" && losetup -D; } >/dev/null 2>&1 
@@ -447,7 +447,7 @@ OUTFD=/proc/self/fd/$2
 ZIPFILE="$3"
 
 ui_print() {
-  echo -e "ui_print $1\nui_print" >>$OUTFD
+  echo -e "ui_print $1" >>$OUTFD
 }
 
 package_extract_file() {
@@ -455,14 +455,14 @@ package_extract_file() {
 }
 
 ' > $updater_script
-	printf "%s\n\n" "ui_print "Flashing repacked super rom"\n" >> $updater_script
+	printf "%s\n\n" "ui_print \"Flashing repacked super rom\"" >> $updater_script
 	for firmware in firmware-update/*; do
 		case $firmware in *.img) 
 			part_name=${firmware##*/}
 			part_name=${part_name%.*}
 			echo "ui_print \"Updating $part_name...\"" >> $updater_script
 			echo "package_extract_file $firmware /dev/block/bootdevice/by-name/${part_name}_a" >> $updater_script
-			printf "%s\n\n" "package_extract_file $firmware /dev/block/bootdevice/by-name/${part_name}_b\n" >> $updater_script;;
+			printf "%s\n\n" "package_extract_file $firmware /dev/block/bootdevice/by-name/${part_name}_b" >> $updater_script;;
 		esac
 	done
 	echo 'ui_print "Installing super..."' >> $updater_script
