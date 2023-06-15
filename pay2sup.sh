@@ -90,8 +90,7 @@ get_partitions() {
 	fi
 	[ -z "$FSTABS" ] && FSTABS="$(cat $TEMP/etc/fstab*)"
 	[ -z "$FSTABS" ] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
-	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" && $2 != "/cache" && $2 != "/misc" && $2 != "/oem" && $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
-	PART_LIST=$(echo "$PART_LIST" | awk '{ gsub("/",""); print $1".img" }')
+	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ && !/\/data|\/metadata|\/boot|\/vendor_boot|\/recovery|\/init_boot|\/dtbo|\/cache|\/misc|\/oem|\/persist/ && $2 ~ /^\/[a-z]*(_|[a-z])*[^/]$/ { gsub("/",""); print $2}')
 	for img in "$HOME"/extracted/*.img; do
 		case "$PART_LIST" in *${img##*/}*) export PARTS="$PARTS ${img##*/} "; esac
 	done
@@ -185,8 +184,9 @@ super_extract() {
 		echo "Extracting super from archive (This takes a while)"
 		echo
 		super_path="$(7z l "$ROM" | awk '/super.img/ { print $6 }')"
-		7z e -y "$ROM" "*.img" "*/*.img" "*/*/*.img" -o"$HOME"/extracted 1> /dev/null
-		7z e -y "$ROM" "${super_path}" -o"$HOME" 1> /dev/null
+		firmware_images=$(7z l "$ROM" | awk '/boot.img|vendor_boot.img|dtbo.img|vbmeta.img|vbmeta_system.img/ { printf "%s ", $6}')
+		7z e -y "$ROM" $(echo $firmware_images) -oextracted 1> /dev/null
+		7z e -y "$ROM" "${super_path}" 1> /dev/null
 		case ${super_path##*/} in 
 			*.gz) pigz -d ${super_path##*/};;
 			*.img) :;;
