@@ -89,3 +89,4 @@ sh pay2sup.sh -rw -r -dfe -t <corenumber> <path-to-ROM>
 - Motorola G20
 - POCO F3
 - Redmi Note 10 (Mojito)
+- Oneplus 8T
