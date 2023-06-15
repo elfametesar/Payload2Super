@@ -20,7 +20,7 @@ Note that --continue or payload.zip|.bin flag has to come after all other flags 
 
 ```
 
-This tool has only been tested on POCO F3 device, and ~~is compatible with devices that have the same type of super partition scheme.~~ This tool is aimed to support multiple devices, however it requires testers, which I have none. You are free to test it on your device and give feedbacks.
+~~This tool has only been tested on POCO F3 device, and is compatible with devices that have the same type of super partition scheme.~~ This tool is aimed to support multiple devices, however it requires testers, which I have none. You are free to test it on your device and give feedbacks.
 
 It basically converts any payload flashable ROMs into super flashables to make flashing easier and faster. You can also repack super flashables to grant them read&write access and increase/decrease partition sizes or disable Android's file encryption.
 
