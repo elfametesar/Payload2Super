@@ -53,7 +53,7 @@ add_space() {
 }
 
 remove_overlay() {
-	magiskboot hexpatch "HOME"/extracted/vendor.img "0A6F7665726C6179" "0A2320202020206f7665726c6179"
+	magiskboot hexpatch "$HOME"/extracted/vendor.img "0A6F7665726C6179" "0A2320202020206f7665726c6179"
 }
 
 disable_encryption() {
@@ -69,7 +69,7 @@ disable_encryption() {
 	       	2c777261707065646b6579\
 	       	2c656e637279707461626c653d666f6f746572"
 	for hex in $encryption_hexes; do
-		magiskboot hexpatch "HOME"/extracted/vendor.img $hex ""
+		magiskboot hexpatch "$HOME"/extracted/vendor.img $hex ""
 	done
 	echo -e "Android file encryption system has been disabled succesfully\n"
 	sleep 2
