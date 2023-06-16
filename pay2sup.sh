@@ -15,7 +15,9 @@ export TEMP2="$HOME"/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
 trap "exit" INT
-trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+trap "{ umount $TEMP || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+
+[ "$PWD" = "/" ] && { echo "Working directory cannot be the root of your file system, it is dangerous"; exit 1; }
 
 failure() {
   lineno=$1
@@ -110,7 +112,7 @@ get_partitions() {
 	for img in "$HOME"/extracted/*.img; do
 		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done
-	umount "$TEMP" || umount -l "$TEMP"
+	{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 }
 
 toolchain_download() {
