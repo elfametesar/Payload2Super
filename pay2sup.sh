@@ -97,7 +97,7 @@ get_partitions() {
                                   $2 != "/cache" &&\
                                   $2 != "/misc" &&\
                                   $2 != "/oem" &&\
-                                  $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
+                                  $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$'| xargs printf "%s.img ")
 	for img in "$HOME"/extracted/*.img; do
 		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done

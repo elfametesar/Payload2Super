@@ -145,12 +145,16 @@ debloat() {
 		loop=$(losetup -f)
 		losetup $loop $img
 		mount $loop "$TEMP"
-		sudo find "$TEMP" -name "*.apk" -exec $SHELL -c 'set -- {}; entry=${1##*/}; entry=${entry%.apk}; grep -i -q "$entry\(.apk\|$\)" '$debloat_list'' \; -and -exec mv {} "$debloated_folder" \;
+		find "$TEMP" -name "*.apk" | while read line; do
+	        	 app="${line##*/}"
+			 app="${app%.apk}"
+			 grep -i -E -q "$app(.apk|$)" "$debloat_list" && mv "$line" "$debloated_folder"
+		done
 		{ umount "$TEMP" || umount -l "$TEMP"; losetup -D; } 2> /dev/null
 	done
 }
 
-set -v
+set -x
 
 case $1 in
 	"shrink") shift; shrink "$@";;
