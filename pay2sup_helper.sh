@@ -2,16 +2,7 @@
 
 trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
 
-failure() {
-  lineno=$1
-  msg=$2
-  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
-}
-
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
-
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
-
 shrink() {
 	for img in "$@"; do
 		total_size=$(tune2fs -l "$img" | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
@@ -141,6 +132,8 @@ preserve_secontext() {
 		losetup -D
 	done
 }
+
+set -v
 
 case $1 in
 	"shrink") shift; shrink "$@";;

@@ -14,18 +14,11 @@ export TEMP="$HOME"/tmp
 export TEMP2="$HOME"/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
+
 trap "exit" INT
-trap "{ umount $TEMP || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+trap "{ umount $TEMP || umount -l $TEMP; losetup -D; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE; } 2> /dev/null" EXIT
 
 [ "$PWD" = "/" ] && { echo "Working directory cannot be the root of your file system, it is dangerous"; exit 1; }
-
-failure() {
-  lineno=$1
-  msg=$2
-  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
-}
-
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
 
 [ $(id -u) -eq 0 ] || {
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
@@ -98,7 +91,7 @@ get_partitions() {
         $2 ~ /^\/[a-z]*(_|[a-z])*[^/]$/ {
                 gsub("/","")
                 printf "%s.img ", $2
-        }'
+	}')
 	for img in "$HOME"/extracted/*.img; do
 		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done
@@ -543,9 +536,9 @@ recovery() {
 }
 
 main() {
-	[ -f "$LOG_FILE" ] && rm "$LOG_FILE"
+	set -x
 	ROM=$1
-	{ get_os_type; toolchain_check; } 2>> "$LOG_FILE"
+	{ get_os_type; toolchain_check; }
 	[ -z $CONTINUE ] && {
 		cleanup
 		if [ -z "$ROM" ] || [ ! -f "$ROM" ] && [ ! -b "$ROM" ]; then
@@ -554,21 +547,21 @@ main() {
 		fi
 		project_structure
 		case "$ROM" in
-			*.bin) payload_extract 2>> "$LOG_FILE";;
-			*.img|/dev/block/by-name/super) super_extract 2>> "$LOG_FILE";;
+			*.bin) payload_extract;;
+			*.img|/dev/block/by-name/super) super_extract;;
 			*.tgz)
 				echo "Extracting the first layer of this archive to check if it is viable"
 				echo
 				7z e -y "$ROM" -o"$HOME" >/dev/null 2>&1 || { echo "ROM is not supported"; exit 1; }
 				ROM="$(7z l $ROM | awk '/.tar/ {print $6}')"
-				super_extract 2>> "$LOG_FILE";;
+				super_extract ;;
 			*)
 				if 7z l "$ROM" 2> /dev/null | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
-					super_extract 2>> "$LOG_FILE"
+					super_extract 
 				elif 7z l "$ROM" 2> /dev/null | grep -q payload.bin >/dev/null 2>&1; then
-					payload_extract 2>> "$LOG_FILE"
+					payload_extract 
 				elif [ -b "$ROM" ]; then
-					super_extract 2>> "$LOG_FILE"
+					super_extract 
 				else
 					echo "ROM is not supported"
 					exit
@@ -589,7 +582,7 @@ main() {
 		flashable_package
 		cleanup
 		exit
-	} 2>> "$LOG_FILE"
+	}
 }
 
 help_me() {
@@ -648,13 +641,13 @@ for _ in "$@"; do
 				exit 1
 			fi
 			export CONTINUE=1
-			main;;	
+			main 2> "$LOG_FILE";;	
 		-*)
 			help_me
 			echo "$1 is not a valid command"
 			exit;;
 		*)
-			main "$(realpath $1 2> /dev/null)";;
+			main "$(realpath $1 2> /dev/null)" 2> "$LOG_FILE";;
 
 	esac
 done
