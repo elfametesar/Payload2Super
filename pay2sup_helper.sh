@@ -22,7 +22,8 @@ get_sizes() {
 		printf "%s\t%s\n" "${img%.img}" "${size}M"
 		sum=$( calc $sum+$size )
 	done
-	echo "\nSuper block size is ${super_size}M."
+	echo
+	echo "Super block size is ${super_size}M."
 	echo
 	if [ $((super_size-sum)) -lt 0 ]; then
 		echo

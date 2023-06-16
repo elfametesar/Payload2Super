@@ -623,7 +623,7 @@ for _ in "$@"; do
 			export DEBLOAT=1
 			shift
 			[ -f "$1" ] && debloat_list="$(realpath $1)" && shift || debloat_list="$HOME/debloat.txt"
-			curl -L -k 
+			[ -f "$debloat_list" ] || curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
 			continue;;
 		"-rw"| "--read-write")
 			export GRANT_RW=1
