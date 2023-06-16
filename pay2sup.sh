@@ -505,7 +505,7 @@ recovery_resize() {
 
 recovery() {
 	trap "cleanup; rm -rf $HOME/bin" EXIT
-	[ -f "$LOG_FILE" ] && rm $LOG_FILE
+	set -x
 	ROM=/dev/block/by-name/super
 	DFE=1
 	[ $NOT_IN_RECOVERY -ne 1 ] && SPARSE="--sparse"
@@ -517,6 +517,7 @@ recovery() {
 		super_extract
 		get_partitions
 		read_write
+		[ -f "$HOME/debloat.txt" ] && $SHELL "$HOME"/pay2sup_helper.sh debloat "$HOME/debloat.txt"
 		recovery_resize
 		patch_kernel
 		pack
@@ -532,7 +533,7 @@ recovery() {
 			dd if="$HOME"/extracted/vendor_boot.img of=/dev/block/by-name/vendor_boot$SLOT
 		fi
 		cleanup
-	} 2>> "$LOG_FILE"
+	}
 }
 
 main() {
@@ -617,7 +618,8 @@ for _ in "$@"; do
 	case $1 in
 		"--recovery")
 			export RECOVERY=1
-			recovery
+			export DEBLOAT=1
+			recovery 2> $LOG_FILE
 			exit;;
 		"-d"| "--debloat")
 			export DEBLOAT=1
