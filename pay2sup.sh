@@ -574,8 +574,11 @@ main() {
 		get_partitions
 		get_read_write_state
 		[ $GRANT_RW -eq 1 ] && read_write
+		[ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ] && [ ! -z $DEBLOAT ] && $SHELL "$HOME/pay2sup_helper.sh" debloat $debloat_list
 		[ $RESIZE -eq 1 ] && resize 
-		[ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ] && [ -d "/etc/selinux" ] && echo "Preserving SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
+		if [ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ]; then
+			[ -d "/etc/selinux" ] && echo "Preserving SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
+		fi
 		get_read_write_state
 		patch_kernel
 		pack
@@ -596,6 +599,8 @@ OPTION 2: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
 
 -dfe | --disable-encryption = Disables Android's file encryption. This parameter requires read&write partitions.
 
+-d   | --debloat	    = Debloats partition images with a given debloat list. If list file isn't provided or doesn't exist, it will default to debloat.txt in project directory. If that doesn't exist either, it will skip debloating. 
+
 -t   | --thread	            = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
 
 -c   | --continue           = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
@@ -614,7 +619,12 @@ for _ in "$@"; do
 			export RECOVERY=1
 			recovery
 			exit;;
-
+		"-d"| "--debloat")
+			export DEBLOAT=1
+			shift
+			[ -f "$1" ] && debloat_list="$(realpath $1)" && shift || debloat_list="$HOME/debloat.txt"
+			curl -L -k 
+			continue;;
 		"-rw"| "--read-write")
 			export GRANT_RW=1
 			shift

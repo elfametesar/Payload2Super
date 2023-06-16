@@ -4,17 +4,19 @@
 OPTION 1: pay2sup.sh [-rw|--read-write] [-r|--resize] payload.bin|super.img|rom.zip|/dev/block/by-name/super
 OPTION 2: pay2sup.sh [-rw|--read-write] [-r|--resize] [-c|--continue]
 
--rw | --read-write           = Grants write access to all the partitions.
+-rw  | --read-write          = Grants write access to all the partitions.
 
--r  | --resize	             = Resizes partitions based on user input. User input will be asked during the program.
+-r   | --resize	             = Resizes partitions based on user input. User input will be asked during the program.
 
 -dfe | --disable-encryption  = Disables Android's file encryption. This parameter requires read&write partitions.
 
--t  | --thread	             = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
+-d   | --debloat             = Debloats partition images with a given debloat list. If list file isn't provided or doesn't exist, it will default to debloat.txt in project directory. If that doesn't exist either, it will skip debloating. 
 
--c  | --continue             = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
+-t   | --thread	             = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
 
--h  | --help	             = Prints out this help message.
+-c   | --continue            = Continues the process if the program had to quit early. Do not specify a payload file with this option. NOTE: This option could be risky depending on which part of the process the program exited. Use only if you know what you're doing.
+
+-h   | --help	             = Prints out this help message.
 
 Note that --continue or payload.zip|.bin flag has to come after all other flags otherwise other flags will be ignored. You should not use payload.zip|.bin and --continue flags mixed with together. They are mutually exclusive.
 
@@ -32,6 +34,7 @@ It basically converts any payload flashable ROMs into super flashables to make f
  - Can disable Android's file encryption
  - Can use multi-threads to make process faster
  - Can continue if the program has exited in the middle of a process.
+ - Can debloat partition images in case of exceeding super partition size
 
 # FAQ
  - I get an error while repacking super, or resizing partitions, saying partition sizes exceed the super block size, what do I do?

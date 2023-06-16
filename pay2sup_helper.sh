@@ -133,6 +133,22 @@ preserve_secontext() {
 	done
 }
 
+debloat() {
+	debloat_list="$1"
+	debloated_folder="$HOME/debloated_packages"
+	[ -f "$debloat_list" ] || return
+	[ -d "$debloated_folder" ] || mkdir "$debloated_folder"
+	for img in $PARTS; do
+		echo "Debloating the partition ${img%.img}"
+		echo
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount $loop "$TEMP"
+		sudo find "$TEMP" -name "*.apk" -exec $SHELL -c 'set -- {}; entry=${1##*/}; entry=${entry%.apk}; grep -i -q "$entry\(.apk\|$\)" '$debloat_list'' \; -and -exec mv {} "$debloated_folder" \;
+		{ umount "$TEMP" || umount -l "$TEMP"; losetup -D; } 2> /dev/null
+	done
+}
+
 set -v
 
 case $1 in
@@ -144,4 +160,5 @@ case $1 in
 	"preserve_secontext") preserve_secontext;;
 	"restore_secontext") restore_secontext;;
 	"patch_kernel") kernel_patch $2;;
+	"debloat") debloat "$2";;
 esac
