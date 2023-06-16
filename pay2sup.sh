@@ -86,12 +86,18 @@ get_partitions() {
 	[ -z "$FSTABS" ] && FSTABS="$(cat $TEMP/etc/fstab*)"
 	[ -z "$FSTABS" ] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	PART_LIST=$(\
-		echo "$FSTABS" | awk '!seen[$2]++ &&\
-        !/\/data|\/metadata|\/boot|\/vendor_boot|\/recovery|\/init_boot|\/dtbo|\/cache|\/misc|\/oem|\/persist/ &&\
-        $2 ~ /^\/[a-z]*(_|[a-z])*[^/]$/ {
-                gsub("/","")
-                printf "%s.img ", $2
-	}')
+		echo "$FSTABS" | awk '!seen[$2]++ { if(\
+				  $2 != "/data" &&\
+                                  $2 != "/metadata" &&\
+                                  $2 != "/boot" &&\
+                                  $2 != "/vendor_boot"&&\
+                                  $2 != "/recovery" &&\
+                                  $2 != "/init_boot" &&\
+                                  $2 != "/dtbo" &&\
+                                  $2 != "/cache" &&\
+                                  $2 != "/misc" &&\
+                                  $2 != "/oem" &&\
+                                  $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
 	for img in "$HOME"/extracted/*.img; do
 		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done
@@ -625,7 +631,7 @@ for _ in "$@"; do
 			export DEBLOAT=1
 			shift
 			[ -f "$1" ] && debloat_list="$(realpath $1)" && shift || debloat_list="$HOME/debloat.txt"
-			[ -f "$debloat_list" ] || curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
+			[ ! -f "$debloat_list" ] && [ $RECOVERY -eq 0 ] &&  curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
 			continue;;
 		"-rw"| "--read-write")
 			export GRANT_RW=1
