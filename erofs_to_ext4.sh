@@ -25,6 +25,8 @@ erofs_converter_by_mount() {
 	sh $HOME/pay2sup_helper.sh shrink $1 || true
 }
 
+set -x
+
 case $1 in
 	convert)
 		if [ $LINUX -eq 1 ]; then

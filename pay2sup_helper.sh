@@ -2,16 +2,7 @@
 
 trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
 
-failure() {
-  lineno=$1
-  msg=$2
-  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
-}
-
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
-
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
-
 shrink() {
 	for img in "$@"; do
 		total_size=$(tune2fs -l "$img" | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
@@ -31,7 +22,8 @@ get_sizes() {
 		printf "%s\t%s\n" "${img%.img}" "${size}M"
 		sum=$( calc $sum+$size )
 	done
-	echo "\nSuper block size is ${super_size}M."
+	echo
+	echo "Super block size is ${super_size}M."
 	echo
 	if [ $((super_size-sum)) -lt 0 ]; then
 		echo
@@ -142,6 +134,28 @@ preserve_secontext() {
 	done
 }
 
+debloat() {
+	debloat_list="$1"
+	debloated_folder="$HOME/debloated_packages"
+	[ -f "$debloat_list" ] || return
+	[ -d "$debloated_folder" ] || mkdir "$debloated_folder"
+	for img in $PARTS; do
+		echo "Debloating the partition ${img%.img}"
+		echo
+		loop=$(losetup -f)
+		losetup $loop $img
+		mount $loop "$TEMP"
+		find "$TEMP" -name "*.apk" | while read line; do
+	        	 app="${line##*/}"
+			 app="${app%.apk}"
+			 grep -i -E -q "$app(.apk|$)" "$debloat_list" && mv "$line" "$debloated_folder"
+		done
+		{ umount "$TEMP" || umount -l "$TEMP"; losetup -D; } 2> /dev/null
+	done
+}
+
+set -x
+
 case $1 in
 	"shrink") shift; shrink "$@";;
 	"get") get_sizes $2;;
@@ -151,4 +165,5 @@ case $1 in
 	"preserve_secontext") preserve_secontext;;
 	"restore_secontext") restore_secontext;;
 	"patch_kernel") kernel_patch $2;;
+	"debloat") debloat "$2";;
 esac

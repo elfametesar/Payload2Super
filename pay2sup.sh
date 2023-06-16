@@ -14,16 +14,11 @@ export TEMP="$HOME"/tmp
 export TEMP2="$HOME"/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
+
 trap "exit" INT
-trap "{ umount $TEMP 2> /dev/null || umount -l $TEMP; losetup -D; } 2> /dev/null" EXIT
+trap "{ umount $TEMP || umount -l $TEMP; losetup -D; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE; } 2> /dev/null" EXIT
 
-failure() {
-  lineno=$1
-  msg=$2
-  echo "Failed at $lineno: $0: $msg" >> $LOG_FILE
-}
-
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+[ "$PWD" = "/" ] && { echo "Working directory cannot be the root of your file system, it is dangerous"; exit 1; }
 
 [ $(id -u) -eq 0 ] || {
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
@@ -90,12 +85,23 @@ get_partitions() {
 	fi
 	[ -z "$FSTABS" ] && FSTABS="$(cat $TEMP/etc/fstab*)"
 	[ -z "$FSTABS" ] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
-	PART_LIST=$(echo "$FSTABS" | awk '!seen[$2]++ { if($2 != "/data" && $2 != "/metadata" && $2 != "/boot" && $2 != "/vendor_boot" && $2 != "/recovery" && $2 != "/init_boot" && $2 != "/dtbo" && $2 != "/cache" && $2 != "/misc" && $2 != "/oem" && $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$')
-	PART_LIST=$(echo "$PART_LIST" | awk '{ gsub("/",""); print $1".img" }')
+	PART_LIST=$(\
+		echo "$FSTABS" | awk '!seen[$2]++ { if(\
+				  $2 != "/data" &&\
+                                  $2 != "/metadata" &&\
+                                  $2 != "/boot" &&\
+                                  $2 != "/vendor_boot"&&\
+                                  $2 != "/recovery" &&\
+                                  $2 != "/init_boot" &&\
+                                  $2 != "/dtbo" &&\
+                                  $2 != "/cache" &&\
+                                  $2 != "/misc" &&\
+                                  $2 != "/oem" &&\
+                                  $2 != "/persist" ) print $2 }'  | grep -E -o '^/[a-z]*(_|[a-z])*[^/]$'| xargs printf "%s.img ")
 	for img in "$HOME"/extracted/*.img; do
-		case "$PART_LIST" in *${img##*/}*) export PARTS="$PARTS ${img##*/} "; esac
+		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done
-	umount "$TEMP" || umount -l "$TEMP"
+	{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 }
 
 toolchain_download() {
@@ -184,12 +190,14 @@ super_extract() {
 	{ file "$ROM" | grep -q -i "archive"; } && {
 		echo "Extracting super from archive (This takes a while)"
 		echo
-		super_path="$(7z l "$ROM" | grep -o -E '[a-z]*[A-Z]*[/]*super.img.*')"
-		7z e -y "$ROM" "*.img" "*/*.img" "*/*/*.img" -o"$HOME"/extracted 1> /dev/null
-		7z e -y "$ROM" "${super_path}" -o"$HOME" 1> /dev/null
+		super_path="$(7z l "$ROM" | awk '/super.img/ { print $6 }')"
+		firmware_images=$(7z l "$ROM" | awk '/boot.img|vendor_boot.img|dtbo.img|vbmeta.img|vbmeta_system.img/ { printf "%s ", $6}')
+		7z e -y "$ROM" $(echo $firmware_images) -oextracted 1> /dev/null
+		7z e -y "$ROM" "${super_path}" 1> /dev/null
 		case ${super_path##*/} in 
 			*.gz) pigz -d ${super_path##*/};;
-			*) 7z e "${super_path##*/}" >/dev/null 2>&1 && rm "${super_path##*/}";;
+			*.img) :;;
+			*) 7z e -y "${super_path##*/}" >/dev/null 2>&1 && rm "${super_path##*/}";;
 		esac
 		ROM=super.img
 	}
@@ -503,7 +511,7 @@ recovery_resize() {
 
 recovery() {
 	trap "cleanup; rm -rf $HOME/bin" EXIT
-	[ -f "$LOG_FILE" ] && rm $LOG_FILE
+	set -x
 	ROM=/dev/block/by-name/super
 	DFE=1
 	[ $NOT_IN_RECOVERY -ne 1 ] && SPARSE="--sparse"
@@ -515,6 +523,7 @@ recovery() {
 		super_extract
 		get_partitions
 		read_write
+		[ -f "$HOME/debloat.txt" ] && $SHELL "$HOME"/pay2sup_helper.sh debloat "$HOME/debloat.txt"
 		recovery_resize
 		patch_kernel
 		pack
@@ -530,13 +539,13 @@ recovery() {
 			dd if="$HOME"/extracted/vendor_boot.img of=/dev/block/by-name/vendor_boot$SLOT
 		fi
 		cleanup
-	} 2>> "$LOG_FILE"
+	}
 }
 
 main() {
-	[ -f "$LOG_FILE" ] && rm "$LOG_FILE"
+	set -x
 	ROM=$1
-	{ get_os_type; toolchain_check; } 2>> "$LOG_FILE"
+	{ get_os_type; toolchain_check; }
 	[ -z $CONTINUE ] && {
 		cleanup
 		if [ -z "$ROM" ] || [ ! -f "$ROM" ] && [ ! -b "$ROM" ]; then
@@ -545,15 +554,21 @@ main() {
 		fi
 		project_structure
 		case "$ROM" in
-			*.bin) payload_extract 2>> "$LOG_FILE";;
-			*.img|/dev/block/by-name/super) super_extract 2>> "$LOG_FILE";;
+			*.bin) payload_extract;;
+			*.img|/dev/block/by-name/super) super_extract;;
+			*.tgz)
+				echo "Extracting the first layer of this archive to check if it is viable"
+				echo
+				7z e -y "$ROM" -o"$HOME" >/dev/null 2>&1 || { echo "ROM is not supported"; exit 1; }
+				ROM="$(7z l $ROM | awk '/.tar/ {print $6}')"
+				super_extract ;;
 			*)
 				if 7z l "$ROM" 2> /dev/null | grep -E -q '[a-z]*[A-Z]*[/]*super.img.*' 2> /dev/null; then
-					super_extract 2>> "$LOG_FILE"
+					super_extract 
 				elif 7z l "$ROM" 2> /dev/null | grep -q payload.bin >/dev/null 2>&1; then
-					payload_extract 2>> "$LOG_FILE"
+					payload_extract 
 				elif [ -b "$ROM" ]; then
-					super_extract 2>> "$LOG_FILE"
+					super_extract 
 				else
 					echo "ROM is not supported"
 					exit
@@ -566,15 +581,18 @@ main() {
 		get_partitions
 		get_read_write_state
 		[ $GRANT_RW -eq 1 ] && read_write
+		[ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ] && [ ! -z $DEBLOAT ] && $SHELL "$HOME/pay2sup_helper.sh" debloat $debloat_list
 		[ $RESIZE -eq 1 ] && resize 
-		[ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ] && [ -d "/etc/selinux" ] && echo "Preserving SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
+		if [ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ]; then
+			[ -d "/etc/selinux" ] && echo "Preserving SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
+		fi
 		get_read_write_state
 		patch_kernel
 		pack
 		flashable_package
 		cleanup
 		exit
-	} 2>> "$LOG_FILE"
+	}
 }
 
 help_me() {
@@ -587,6 +605,8 @@ OPTION 2: $0 [-rw|--read-write] [-r|--resize] [-c|--continue]
 -r   | --resize	            = Resizes partitions based on user input. User input will be asked during the program.
 
 -dfe | --disable-encryption = Disables Android's file encryption. This parameter requires read&write partitions.
+
+-d   | --debloat	    = Debloats partition images with a given debloat list. If list file isn't provided or doesn't exist, it will default to debloat.txt in project directory. If that doesn't exist either, it will skip debloating. 
 
 -t   | --thread	            = Certain parts of the program are multitaskable. If you wish to make the program faster, you can specify a number here.
 
@@ -604,9 +624,15 @@ for _ in "$@"; do
 	case $1 in
 		"--recovery")
 			export RECOVERY=1
-			recovery
+			export DEBLOAT=1
+			recovery 2> $LOG_FILE
 			exit;;
-
+		"-d"| "--debloat")
+			export DEBLOAT=1
+			shift
+			[ -f "$1" ] && debloat_list="$(realpath $1)" && shift || debloat_list="$HOME/debloat.txt"
+			[ ! -f "$debloat_list" ] && [ $RECOVERY -eq 0 ] &&  curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
+			continue;;
 		"-rw"| "--read-write")
 			export GRANT_RW=1
 			shift
@@ -633,13 +659,13 @@ for _ in "$@"; do
 				exit 1
 			fi
 			export CONTINUE=1
-			main;;	
+			main 2> "$LOG_FILE";;	
 		-*)
 			help_me
 			echo "$1 is not a valid command"
 			exit;;
 		*)
-			main "$(realpath $1 2> /dev/null)";;
+			main "$(realpath $1 2> /dev/null)" 2> "$LOG_FILE";;
 
 	esac
 done
