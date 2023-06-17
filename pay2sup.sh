@@ -510,7 +510,7 @@ recovery_resize() {
 }
 
 recovery() {
-	trap "cleanup; rm -rf $HOME/bin" EXIT
+	trap "cleanup; rm -rf $HOME/bin $HOME/debloat.txt; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE;" EXIT
 	set -x
 	ROM=/dev/block/by-name/super
 	DFE=1
