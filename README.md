@@ -39,8 +39,7 @@ It basically converts any payload flashable ROMs into super flashables to make f
 # FAQ
  - I get an error while repacking super, or resizing partitions, saying partition sizes exceed the super block size, what do I do?
 
-This happens more often because the ROM you're converting is EROFS and while converting to EXT4, it has to get bigger because of the filesystems' compression rates. If the source ROM is too big, this error can happen. To work around it, you have to debloat the partition images. Tool suggests where you can find the partition images. Mount them and delete stuff then do:
-
+This happens more often because the ROM you're converting is EROFS and while converting to EXT4, it has to get bigger because of the filesystems' compression rates. If the source ROM is too big, this error can happen. To work around it, you have to debloat the partition images. Tool has a debloat feature that you can use.
 
 # To get this tool
 Download the zip file from releases section, or download this repository and make sure all the files are in the root directory of the zip file.
