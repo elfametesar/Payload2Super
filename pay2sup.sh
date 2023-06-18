@@ -514,7 +514,7 @@ recovery() {
 	set -x
 	ROM=/dev/block/by-name/super
 	DFE=1
-	[ $NOT_IN_RECOVERY -ne 1 ] && SPARSE="--sparse"
+	[ $NOT_IN_RECOVERY -ne 0 ] && SPARSE="--sparse"
 	chmod +x -R "$HOME"/bin
 	{
 		project_structure
