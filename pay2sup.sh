@@ -223,7 +223,7 @@ read_write() {
 			echo
 			$SHELL "$HOME"/fs_converter.sh erofs $img 1> /dev/null || { echo "An error occured during conversion, skipping"; continue; }
 		else
-			if ! read_write_check $img; then
+			if ! read_write_check $img || dump.f2fs $img >/dev/null 2>&1; then
 		        	if dump.f2fs $img >/dev/null 2>&1; then
 					echo "Converting F2FS ${img%.img} image to EXT4"
 				else
@@ -317,10 +317,10 @@ resize() {
 	echo
 	[ $shrink = "y" ] && shrink_before_resize 2> /dev/null
 	for img in $PARTS; do
-		if dump.erofs $img >/dev/null 2>&1; then
+		if dump.erofs $img >/dev/null 2>&1 || dump.f2fs $img >/dev/null 2>&1; then
 			if [ $READ_ONLY -eq 0 ]; then
-				echo "EROFS partitions cannot be resized unless they are converted to EXT4, switching on read&write mode" && echo
-				read_write || { echo "EROFS partitions cannot be resized unless they are converted to EXT4, and your distro does not support this conversion."; echo; return 1; }
+				echo "EROFS/F2FS partitions cannot be resized unless they are converted to EXT4, switching on read&write mode" && echo
+				read_write || { echo "EROFS/F2FS partitions cannot be resized unless they are converted to EXT4, and your distro does not support this conversion."; echo; return 1; }
 			else
 				return
 			fi
@@ -390,7 +390,7 @@ pack() {
 }
 
 patch_kernel() {
-	[ $BACK_TO_EROFS -eq 1 ] && return
+	[ $BACK_TO_EROFS -eq 1 ] || dump.f2fs $HOME/extracted/system.img >/dev/null 2>&1 && return
 	if [ ! -f "boot.img" ] && [ ! -f "vendor_boot.img" ]; then
 		if [ $LINUX -eq 0 ]; then
 			dd if=/dev/block/by-name/boot$SLOT of=boot.img
