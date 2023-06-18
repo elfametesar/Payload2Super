@@ -391,7 +391,7 @@ pack() {
 }
 
 patch_kernel() {
-	[ $BACK_TO_EROFS -eq 1 ] || dump.f2fs $HOME/extracted/system.img >/dev/null 2>&1 && return
+	[ $EROFS -eq 1 ] || [ $BACK_TO_EROFS -eq 1 ] || dump.f2fs $HOME/extracted/system.img >/dev/null 2>&1 && return
 	if [ ! -f "boot.img" ] && [ ! -f "vendor_boot.img" ]; then
 		if [ $LINUX -eq 0 ]; then
 			dd if=/dev/block/by-name/boot$SLOT of=boot.img
