@@ -220,7 +220,7 @@ read_write() {
 	[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
 	for img in $PARTS; do
 		if dump.erofs $img >/dev/null 2>&1; then 
-			echo "Converting EROFS ${img%.img} image to ext4"
+			echo "Converting EROFS ${img%.img} image to EXT4"
 			echo
 			$SHELL "$HOME"/fs_converter.sh erofs $img 1> /dev/null || { echo "An error occured during conversion, skipping"; continue; }
 		else
@@ -590,6 +590,7 @@ Note that --continue or payload.zip|.bin flag has to come after all other flags 
 for _ in "$@"; do
 	case $1 in
 		"--recovery")
+			[ -z $NOT_IN_RECOVERY ] && { echo "--recovery flag is exclusive to flashable zip"; shift; continue; }
 			export RECOVERY=1
 			export DEBLOAT=1
 			recovery 2> $LOG_FILE
@@ -597,7 +598,7 @@ for _ in "$@"; do
 		"-d"| "--debloat")
 			export DEBLOAT=1
 			shift
-			[ -f "$1" ] && debloat_list="$(realpath $1)" && shift || debloat_list="$HOME/debloat.txt"
+			[ -f "$1" ] && debloat_list="$(realpath $1)" || debloat_list="$HOME/debloat.txt"
 			[ ! -f "$debloat_list" ] && [ $RECOVERY -eq 0 ] &&  curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
 			continue;;
 		"-rw"| "--read-write")
