@@ -6,17 +6,17 @@ export LINUX=0
 export LOG_FILE="$HOME/pay2sup.log"
 export OUT=/sdcard/Payload2Super
 export GRANT_RW=0
+export DEBLOAT=0
 export RESIZE=0
 export READ_ONLY=0
 export EROFS=0
 export DFE=0
 export TEMP="$HOME"/tmp
-export TEMP2="$HOME"/tmp2
 export BACK_TO_EROFS=0
 export RECOVERY=0
 
 trap "exit" INT
-trap "{ umount $TEMP || umount -l $TEMP; losetup -D; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE; } 2> /dev/null" EXIT
+trap "{ umount -d $TEMP || umount -d -l $TEMP; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE; } 2> /dev/null" EXIT
 
 [ "$PWD" = "/" ] && { echo "Working directory cannot be the root of your file system, it is dangerous"; exit 1; }
 
@@ -78,12 +78,18 @@ get_partitions() {
 	vendor="$HOME"/extracted/vendor.img
 	if dump.erofs "$vendor" >/dev/null 2>&1; then
 		fuse.erofs "$vendor" "$TEMP" 1> /dev/null
+		FSTABS="$(cat $TEMP/etc/fstab*)"
+	elif dump.f2fs "$vendor" >/dev/null 2>&1; then
+		loop=$(losetup -f || losetup -f)
+		losetup $loop "$vendor"
+		mount -o ro $loop $TEMP
+		FSTABS="$(sed 's/\x0/ /g' fstab*)"
 	else
 		7z e "$vendor" "etc/fstab*" 1> /dev/null
-		FSTABS=$(sed 's/\x0/ /g' fstab*)
+		FSTABS="$(sed 's/\x0/ /g' fstab*)"
 		rm -f fstab*
 	fi
-	[ -z "$FSTABS" ] && FSTABS="$(cat $TEMP/etc/fstab*)"
+	{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 	[ -z "$FSTABS" ] && { echo "Partition list cannot be retrieved, this is a fatal error, exiting..."; exit 1; }
 	PART_LIST=$(\
 		echo "$FSTABS" | awk '!seen[$2]++ { if(\
@@ -101,7 +107,6 @@ get_partitions() {
 	for img in "$HOME"/extracted/*.img; do
 		case $PART_LIST in *${img##*/}* ) export PARTS="$PARTS ${img##*/} "; esac
 	done
-	{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
 }
 
 toolchain_download() {
@@ -123,59 +128,21 @@ toolchain_download() {
 
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
-grant_rw(){
-	img_size=$(stat -c%s $1)
-	new_size=$(calc $img_size*1.25/512)
-	resize2fs -f $1 ${new_size}s
-	e2fsck -y -E unshare_blocks $1
-	resize2fs -f -M $1
-	resize2fs -f -M $1
-	
-	img_size=$(stat -c%s $1)
-	new_size=$(calc "($img_size+20*1024*1024)/512")
-	resize2fs -f $1 ${new_size}s
-	[ $RESIZE -eq 1 ] && {
-		resize2fs -f -M $1
-		resize2fs -f -M $1
-	}
-}
-
-rebuild() {
-	[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && return
-	loop=$(losetup -f)
-	losetup $loop "$1"
-	mount -o ro $loop "$TEMP" || { losetup -D; return; }
-	$TOYBOX cp -rf "$TEMP"/* "$TEMP2"/
-	size=$(du -sm | cut -f1)
-	find "$TEMP" -exec ls -d -Z {} + > "$HOME/${1%.img}_context"
-	context="$(find $TEMP -exec ls -d -Z {} +)"
-	umount "$TEMP" || umount -l "$TEMP2" && losetup -D
-	make_ext4fs -l ${size}M -L ${1%.img} -a ${1%.img} $1 "$TEMP2" || return
-	loop=$(losetup -f)
-	losetup $loop "$1"
-	mount $loop "$TEMP"
-	echo "$context" | while read context file; do
-		chcon -h $context $file
-	done
-	umount "$TEMP" || umount -l "$TEMP"
-	losetup -D
-}
-
 erofs_conversion() {
 	[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && return 1
 	[ $RECOVERY -eq 1 ] && return 1
 	printf "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
 	echo
-	[ "$choice" = "n" ] && return 1
+	[ "$choice" = "n" ] && exit 1
 	for img in $PARTS; do
-		loop=$(losetup -f)
+		loop=$(losetup -f || losetup -f)
 		losetup $loop $img
 		mount $loop "$TEMP" || { echo "Program cannot convert ${img%*.img} to EROFS because of mounting issues, skipping."; echo; continue; }
 		echo "Converting ${img%*.img} to EROFS"
 		echo
 		mkfs.erofs -zlz4hc ${img%*.img}_erofs.img "$TEMP" 1> /dev/null
-		{ umount "$TEMP" || umount -l "$TEMP" && losetup -D; } >/dev/null 2>&1 
+		{ umount -d "$TEMP" || umount -d -l "$TEMP"; } >/dev/null 2>&1 
 		mv ${img%*.img}_erofs.img $img
 	done
 	BACK_TO_EROFS=1
@@ -242,35 +209,36 @@ payload_extract() {
 	cd extracted
 }
 
+read_write_check() {
+	loop=$(losetup -f || losetup -f)
+	losetup $loop $1
+	mount $loop "$TEMP" 2> /dev/null && return || { mount -o ro $loop "$TEMP"; return 1; } 2> /dev/null
+}
+
 read_write() {
-	echo "Readying images for super packing process"
-	echo
+	[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
 	for img in $PARTS; do
 		if dump.erofs $img >/dev/null 2>&1; then 
-			[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
 			echo "Converting EROFS ${img%.img} image to ext4"
 			echo
-			$SHELL "$HOME"/erofs_to_ext4.sh convert $img 1> /dev/null || { echo "An error occured during conversion, exiting"; exit 1; }
-			[ $DFE -eq 1 ] && [ $img = "vendor.img" ] && $SHELL "$HOME"/pay2sup_helper.sh dfe
+			$SHELL "$HOME"/fs_converter.sh erofs $img 1> /dev/null || { echo "An error occured during conversion, skipping"; continue; }
 		else
-			if ! tune2fs -l $img | grep -i -q shared_blocks; then
-				[ $img = "vendor.img" ] && {
-				       	[ $DFE -eq 1 ] && $SHELL "$HOME"/pay2sup_helper.sh dfe
-					$SHELL "$HOME"/pay2sup_helper.sh remove_overlay
-				}
-				continue
-			fi
-			echo "Making ${img%.img} partition read&write"
-			echo
-			grant_rw $img 1> /dev/null
-			if tune2fs -l $img | grep -i -q shared_blocks; then
-				rebuild $img 1> /dev/null
-			fi
-			if [ $img = "vendor.img" ]; then
-				[ $DFE -eq 1 ] && $SHELL "$HOME"/pay2sup_helper.sh dfe
-				$SHELL "$HOME"/pay2sup_helper.sh remove_overlay
+			if ! read_write_check $img; then
+		        	if dump.f2fs $img >/dev/null 2>&1; then
+					echo "Converting F2FS ${img%.img} image to EXT4"
+				else
+					echo "Making EXT4 ${img%.img} partition read&write"
+				fi
+				echo
+				$SHELL "$HOME"/fs_converter.sh other $img 1> /dev/null || { echo "An error occured during conversion, skipping"; continue; }
 			fi
 		fi
+		[ $DEBLOAT -eq 1 ] && $SHELL "$HOME/pay2sup_helper.sh" debloat $img $debloat_list
+		[ $img = "vendor.img" ] && {
+		       	[ $DFE -eq 1 ] && $SHELL "$HOME"/pay2sup_helper.sh dfe
+			$SHELL "$HOME"/pay2sup_helper.sh remove_overlay
+		}
+		{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2>/dev/null
 	done
 	export READ_ONLY=0
 }
@@ -329,12 +297,13 @@ get_read_write_state() {
 			export EROFS=1
 			export READ_ONLY=1
 			return 1
-		elif tune2fs -l $img 2> /dev/null | grep -i -q shared_blocks; then
-			[ $GRANT_RW -eq 0 ] && echo "Program cannot resize partitions because they are read-only" && echo
-			[ -s $img ] || continue
+		elif ! read_write_check $img; then
+			export EROFS=1
 			export READ_ONLY=1
+			{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 			return 1
 		else
+			{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 			export EROFS=0
 			export READ_ONLY=0
 		fi
@@ -364,7 +333,7 @@ resize() {
 			echo
 			shrink_before_resize 1> /dev/null
 		        if ! $SHELL "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) >/dev/null 2>&1; then
-				erofs_conversion && return || $SHELL "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
+				erofs_conversion && return 
 			fi
 		fi
 		printf "Enter the amount of space you wish to give for ${img%.img} (MB): "
@@ -382,9 +351,8 @@ pack() {
 		printf "If you wish to make any changes to partitions, script pauses here. Your partitions can be found in $PWD. Please make your changes and press enter to continue. If you don't have SELINUX installed in your system, be careful not to replace system files as it will break SELINUX contexts."
 		echo
 		read
-		while mountpoint -q "$TEMP" || mountpoint -q "$TEMP2"; do
+		while mountpoint -q "$TEMP"; do 
 			umount "$TEMP" || umount -l "$TEMP"
-			umount "$TEMP2" || umount -l "$TEMP2"
 		done
 		echo
 		[ -d "/etc/selinux" ] && [ $READ_ONLY -eq 0 ] && echo "Restoring SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext 2>> "$LOG_FILE" 1> /dev/null
@@ -401,7 +369,7 @@ pack() {
 			echo
 			shrink_before_resize 1> /dev/null
 		        if ! $SHELL "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) >/dev/null 2>&1; then
-				erofs_conversion && return || $SHELL "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) 2>&1 1>/dev/null || exit 1
+				erofs_conversion && return 
 			fi
 		fi
 	fi
@@ -489,8 +457,7 @@ project_structure() {
 		flashable/META-INF/com/google/android/\
 		flashable/firmware-update\
 		extracted\
-		tmp\
-		tmp2
+		tmp
 }
 
 recovery_resize() {
@@ -512,6 +479,7 @@ recovery_resize() {
 recovery() {
 	trap "cleanup; rm -rf $HOME/bin $HOME/debloat.txt; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE;" EXIT
 	set -x
+	[ -f "$HOME/debloat.txt" ] && DEBLOAT=1 && debloat_list="$HOME"/debloat.txt
 	ROM=/dev/block/by-name/super
 	DFE=1
 	[ $NOT_IN_RECOVERY -ne 1 ] && SPARSE="--sparse"
@@ -523,7 +491,6 @@ recovery() {
 		super_extract
 		get_partitions
 		read_write
-		[ -f "$HOME/debloat.txt" ] && $SHELL "$HOME"/pay2sup_helper.sh debloat "$HOME/debloat.txt"
 		recovery_resize
 		patch_kernel
 		pack
@@ -581,7 +548,6 @@ main() {
 		get_partitions
 		get_read_write_state
 		[ $GRANT_RW -eq 1 ] && read_write
-		[ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ] && [ ! -z $DEBLOAT ] && $SHELL "$HOME/pay2sup_helper.sh" debloat $debloat_list
 		[ $RESIZE -eq 1 ] && resize 
 		if [ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ]; then
 			[ -d "/etc/selinux" ] && echo "Preserving SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null

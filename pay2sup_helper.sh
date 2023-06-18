@@ -1,8 +1,9 @@
 #!/bin/env sh
 
-trap "{ umount $TEMP || umount -l $TEMP; losetup -D; rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
+trap "{ rm -rf $HOME/kernel_patching; } 2> /dev/null" EXIT
 
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
+
 shrink() {
 	for img in "$@"; do
 		total_size=$(tune2fs -l "$img" | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
@@ -19,7 +20,7 @@ get_sizes() {
 	for img in $PARTS; do
 		size=$(tune2fs -l $img | awk -F: '/Block count/{count=$2} /Block size/{size=$2} END{print count*size}')
 		size=$( calc $size/1024/1024 )
-		printf "%s\t%s\n" "${img%.img}" "${size}M"
+		printf "%-15s\t%s\n" "${img%.img}" "${size}M"
 		sum=$( calc $sum+$size )
 	done
 	echo
@@ -48,18 +49,21 @@ add_space() {
 
 mount_vendor() {
 	vendor="$HOME"/extracted/vendor.img
-	fallocate -l $( calc $(stat -c%s "$vendor")+52428800) "$vendor"
-	resize2fs -f "$vendor" &> /dev/null
-	loop=$(losetup -f)
-	losetup $loop "$vendor"
-	mount $loop "$TEMP" || \
-		{ echo "Program cannot mount vendor, therefore cannot disable file encryption."; echo; return 1; }
+        free_space=$(tune2fs -l "$vendor" | awk -F: '/Free blocks/{count=$2} /Block size/{size=$2} END{print count*size}')
+	[ $free_space -le 52428800 ] && {
+		unmount_vendor
+		fallocate -l $( calc $(stat -c%s "$vendor")+52428800) "$vendor"
+		resize2fs -f "$vendor" &> /dev/null
+		loop=$(losetup -f || losetup -f)
+		losetup $loop "$vendor"
+		mount $loop "$TEMP" || \
+			{ echo "Program cannot mount vendor, therefore cannot disable file encryption."; echo; return 1; }
+	}
 	fstab_contexts="$($TOYBOX ls -Z $TEMP/etc/fstab*)"
 }
 
 unmount_vendor() {
-	umount "$TEMP" || umount -l "$TEMP"
-	losetup -D
+	{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 }
 
 remove_overlay() {
@@ -68,7 +72,6 @@ remove_overlay() {
 	echo "$fstab_contexts" | while read context file; do
 		chcon $context $file
 	done
-	unmount_vendor
 	shrink "$vendor" 1> /dev/null
 }
 
@@ -87,7 +90,6 @@ disable_encryption() {
 	echo "$fstab_contexts" | while read context file; do
 		chcon $context $file
 	done
-	unmount_vendor
 	echo "Android file encryption system has been disabled succesfully"
 	echo
 	sleep 2
@@ -98,7 +100,17 @@ kernel_patch() {
 	cd "$HOME"/kernel_patching
 	image="$1"
 	magiskboot unpack $image || exit 1
-	magiskboot hexpatch ramdisk.cpio "20202065726F6673" "20202065787434"
+	magiskboot decompress ramdisk.cpio ramdisk.cpio.dec >/dev/null 2>&1 && {
+		mv ramdisk.cpio.dec ramdisk.cpio
+       	}
+	for fstab in $(7z l ramdisk.cpio | awk '/fstab*/ {print $4}'); do
+		7z e -y ramdisk.cpio $fstab
+		echo "$PARTS " | while read -d " " part; do
+			sed -i "/^${part%.img} /s/erofs/ext4/" ${fstab##*/}
+			sed -i "/^${part%.img} /s/f2fs/ext4/" ${fstab##*/}
+		done
+		magiskboot cpio ramdisk.cpio "add 0777 $fstab ${fstab##*/}"
+	done
 	magiskboot repack "$image" "${image##*/}"
 	mv "${image##*/}" "$image"
 	rm -rf "$HOME"/kernel_patching
@@ -107,7 +119,7 @@ kernel_patch() {
 restore_secontext() {
 	for img in $PARTS; do
 		[ -f "$HOME/${img%.img}_context" ] && [ -s "$HOME/${img%.img}_context" ] || continue
-		loop=$(losetup -f)
+		loop=$(losetup -f || losetup -f)
 		losetup $loop "$img"
 		mount -o rw $loop "$TEMP" || continue
 		find $TEMP -exec $TOYBOX ls -dZ {} + | awk '/(unlabeled|\?)/ {print $2}' | while read line; do
@@ -117,41 +129,33 @@ restore_secontext() {
 			[ -z "$context" ] && continue
 			chcon -h $context
 		done 
-		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
-		losetup -D
+		{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 	done
 }
 
 preserve_secontext() {
 	for img in $PARTS; do
 		[ -f "$HOME/${img%.img}_context" ] && [ -s "$HOME/${img%.img}_context" ] && continue 
-		loop=$(losetup -f)
+		loop=$(losetup -f || losetup -f)
 		losetup $loop $img
 		mount -o ro $loop "$TEMP" || continue
 		find "$TEMP" -exec $TOYBOX ls -d -Z {} + > "$HOME"/${img%.img}_context
-		{ umount "$TEMP" || umount -l "$TEMP"; } 2> /dev/null
-		losetup -D
+		{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 	done
 }
 
 debloat() {
-	debloat_list="$1"
+	debloat_list="$2"
 	debloated_folder="$HOME/debloated_packages"
 	[ -f "$debloat_list" ] || return
 	[ -d "$debloated_folder" ] || mkdir "$debloated_folder"
-	for img in $PARTS; do
-		echo "Debloating the partition ${img%.img}"
-		echo
-		loop=$(losetup -f)
-		losetup $loop $img
-		mount $loop "$TEMP"
-		find "$TEMP" -name "*.apk" | while read line; do
-	        	 app="${line##*/}"
-			 app="${app%.apk}"
-			 grep -i -E -q "$app(.apk|$)" "$debloat_list" && mv "$line" "$debloated_folder"
-		done
-		{ umount "$TEMP" || umount -l "$TEMP"; losetup -D; } 2> /dev/null
-	done
+	echo " - Debloating the partition ${1%.img}"
+	echo
+	find "$TEMP" -name "*.apk" | while read line; do
+        	 app="${line##*/}"
+		 app="${app%.apk}"
+		 grep -i -E -q "$app(.apk|$)" "$debloat_list" && mv "$line" "$debloated_folder"
+	done 2> /dev/null
 }
 
 set -x
@@ -165,5 +169,5 @@ case $1 in
 	"preserve_secontext") preserve_secontext;;
 	"restore_secontext") restore_secontext;;
 	"patch_kernel") kernel_patch $2;;
-	"debloat") debloat "$2";;
+	"debloat") debloat $2 $3;;
 esac
