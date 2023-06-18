@@ -27,6 +27,7 @@ trap "{ umount -d $TEMP || umount -d -l $TEMP; sed -i 's/+/[ DEBUG ]/g' $LOG_FIL
 
 TOOLCHAIN="make_ext4fs \
 	mkfs.erofs \
+	aapt \
 	magiskboot \
 	toybox \
 	pigz \

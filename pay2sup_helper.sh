@@ -151,10 +151,9 @@ debloat() {
 	[ -d "$debloated_folder" ] || mkdir "$debloated_folder"
 	echo " - Debloating the partition ${1%.img}"
 	echo
-	find "$TEMP" -name "*.apk" | while read line; do
-        	 app="${line##*/}"
-		 app="${app%.apk}"
-		 grep -i -E -q "$app(.apk|$)" "$debloat_list" && mv "$line" "$debloated_folder"
+	find "$TEMP" -name "*.apk" | while read app; do
+		 package_name=$(aapt dump badging $app 2> /dev/null | awk -F \' '/package: / {print $2}')
+		 grep -i -q "^$package_name$" "$debloat_list" && mv "$app" "$debloated_folder"
 	done 2> /dev/null
 }
 
