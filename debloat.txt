@@ -257,7 +257,6 @@ YouTube
 YouTubeMusicPrebuilt
 ZuiCamera
 ZuiXlog
-atfwd
 card
 datastatusnotification
 iReader
@@ -573,7 +572,6 @@ GoogleExtShared
 GoogleFeedback
 GoogleLocationHistory
 GoogleOneTimeInitializer
-GooglePackageInstaller
 GooglePartnerSetup
 GooglePrintRecommendationService
 GoogleRestore
