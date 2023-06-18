@@ -19,7 +19,7 @@ erofs_converter_by_extract() {
 other_fs_converter() {
 	part_name=${1%.img}
 	fallocate -l 8000M ${part_name}_ext4.img
-	mkfs.ext4 -F -t ext4 -d "$TEMP" ${part_name}_ext4.img || { rm ${part_name}_ext4.img; exit 1; }
+	mke2fs -F -t ext4 -O sparse_super,extent -d "$TEMP" ${part_name}_ext4.img || { rm ${part_name}_ext4.img; exit 1; }
 	remounter $1
 }
 
@@ -27,7 +27,7 @@ erofs_converter_by_mount() {
 	part_name=${1%.img}
 	erofsfuse $1 "$TEMP"
 	fallocate -l 8000M ${part_name}_ext4.img
-	mke2fs -F -t ext4 -d "$TEMP" ${part_name}_ext4.img || { rm ${part_name}_ext4.img; exit 1; }
+	mke2fs -F -t ext4 -O sparse_super,extent -d "$TEMP" ${part_name}_ext4.img || { rm ${part_name}_ext4.img; exit 1; }
 	remounter $1
 }
 

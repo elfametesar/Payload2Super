@@ -482,7 +482,7 @@ recovery() {
 	[ -f "$HOME/debloat.txt" ] && DEBLOAT=1 && debloat_list="$HOME"/debloat.txt
 	ROM=/dev/block/by-name/super
 	DFE=1
-	[ $NOT_IN_RECOVERY -ne 0 ] && SPARSE="--sparse"
+	[ $NOT_IN_RECOVERY -eq 0 ] && SPARSE="--sparse"
 	chmod +x -R "$HOME"/bin
 	{
 		project_structure
@@ -501,9 +501,9 @@ recovery() {
 			echo "Flashing super image..."
 			simg2img "$HOME"/flashable/super.img /dev/block/by-name/super
 			echo "Flashing boot image..."
-			dd if="$HOME"/extracted/boot.img of=/dev/block/by-name/boot$SLOT
+			dd if="$HOME"/flashable/firmware-update/boot.img of=/dev/block/by-name/boot$SLOT
 			echo "Flashing vendor_boot image..."
-			dd if="$HOME"/extracted/vendor_boot.img of=/dev/block/by-name/vendor_boot$SLOT
+			dd if="$HOME"/flashable/firmware-update/vendor_boot.img of=/dev/block/by-name/vendor_boot$SLOT
 		fi
 		cleanup
 	}
