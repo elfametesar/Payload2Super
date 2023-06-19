@@ -27,6 +27,7 @@ trap "{ umount -d $TEMP || umount -d -l $TEMP; sed -i 's/+/[ DEBUG ]/g' $LOG_FIL
 
 TOOLCHAIN="make_ext4fs \
 	mkfs.erofs \
+	mke2fs \
 	aapt \
 	magiskboot \
 	toybox \
@@ -49,7 +50,7 @@ toolchain_check() {
 			continue
 		else
 			[ $tool = "adb" ] && [ $LINUX = 0 ] && continue
-			[ $tool = "toybox" ] && [ $LINUX -eq 1 ] && continue
+			[ $tool = "toybox" ] || [ $tool = "mke2fs" ] && [ $LINUX -eq 1 ] && continue
 			missing="$missing $tool "
 		fi
 	done

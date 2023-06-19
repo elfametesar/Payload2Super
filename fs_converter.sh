@@ -18,10 +18,8 @@ erofs_converter_by_extract() {
 
 fs_converter() {
 	part_name=${1%.img}
-	awk '{ print $2 " " $1 }' "$HOME"/${part_name}_context > context
-	sed -i "s|\[|\\\[|g; s|\]|\\\]|g; s|\@|\\\@|g; s|\.|\\\.|g; s|\+|\\\+|g; s|$TEMP |$TEMP/\.\* |" context
-	make_ext4fs -S context -l 8912896000 -L $part_name -a "$TEMP" ${part_name}_ext4.img "$TEMP" || { rm ${part_name}_ext4.img context; exit 1; }
-	rm context
+	fallocate -l 7000M ${part_name}_ext4.img
+	mke2fs -F -d "$TEMP" ${part_name}_ext4.img
 	remounter $1
 }
 
