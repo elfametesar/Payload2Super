@@ -130,7 +130,7 @@ toolchain_download() {
 calc(){ awk 'BEGIN{ printf "%.0f\n", '"$1"' }'; }
 
 erofs_conversion() {
-	[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && return 1
+	[ $LINUX -eq 1 ] && ! getenforce >/dev/null 2>&1 && return 1
 	[ $RECOVERY -eq 1 ] && return 1
 	printf "Because partition image sizes exceed the super block, program cannot create super.img. You can convert back to EROFS, or debloat partitions to fit the super block. Enter y for EROFS, n for debloat (y/n): "
 	read choice
@@ -217,7 +217,8 @@ read_write_check() {
 }
 
 read_write() {
-	[ $LINUX -eq 1 ] && [ ! -d "/etc/selinux" ] && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
+	[ $LINUX -eq 1 ] && ! getenforce >/dev/null 2>&1 && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
+	$SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
 	for img in $PARTS; do
 		if dump.erofs $img >/dev/null 2>&1; then 
 			echo "Converting EROFS ${img%.img} image to ext4"
@@ -356,8 +357,8 @@ pack() {
 			umount "$TEMP" || umount -l "$TEMP"
 		done
 		echo
-		[ -d "/etc/selinux" ] && [ $READ_ONLY -eq 0 ] && echo "Restoring SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext 2>> "$LOG_FILE" 1> /dev/null
 	}
+	getenforce >/dev/null 2>&1 && [ $READ_ONLY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext 2>> "$LOG_FILE"
 	if [ $BACK_TO_EROFS -eq 0 ] && [ $RESIZE -eq 0 ] && [ $READ_ONLY -eq 0 ] && [ $RECOVERY -eq 0 ]; then
 		printf "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
@@ -550,8 +551,8 @@ main() {
 		get_read_write_state
 		[ $GRANT_RW -eq 1 ] && read_write
 		[ $RESIZE -eq 1 ] && resize 
-		if [ $GRANT_RW -eq 1 ] || [ $READ_ONLY -eq 0 ]; then
-			[ -d "/etc/selinux" ] && echo "Preserving SELINUX contexts..." && echo && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext 1> /dev/null
+		if [ $GRANT_RW -eq 0 ] && [ $READ_ONLY -eq 0 ]; then
+			getenforce >/dev/null 2>&1 && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
 		fi
 		get_read_write_state
 		patch_kernel
@@ -590,6 +591,7 @@ Note that --continue or payload.zip|.bin flag has to come after all other flags 
 for _ in "$@"; do
 	case $1 in
 		"--recovery")
+			[ -z $NOT_IN_RECOVERY ] && { echo "--recovery flag is exclusive to flashable zip"; shift; continue; }
 			export RECOVERY=1
 			export DEBLOAT=1
 			recovery 2> $LOG_FILE
@@ -597,7 +599,7 @@ for _ in "$@"; do
 		"-d"| "--debloat")
 			export DEBLOAT=1
 			shift
-			[ -f "$1" ] && debloat_list="$(realpath $1)" && shift || debloat_list="$HOME/debloat.txt"
+			[ -f "$1" ] && debloat_list="$(realpath $1)" || debloat_list="$HOME/debloat.txt"
 			[ ! -f "$debloat_list" ] && [ $RECOVERY -eq 0 ] &&  curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
 			continue;;
 		"-rw"| "--read-write")
