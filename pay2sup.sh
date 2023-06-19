@@ -466,6 +466,7 @@ project_structure() {
 recovery_resize() {
 	shrink_before_resize 
 	$SHELL "$HOME"/pay2sup_helper.sh get $( calc $super_size-10000000 ) 1> /dev/null
+	[ -f empty_space ] || return 1
 	space=$(cat empty_space)
 	add_size=$( calc $space/$(echo $PARTS | wc -w) )
 	echo "Expanding partitions"

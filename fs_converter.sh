@@ -28,7 +28,7 @@ set -x
 case $1 in
 	erofs)
 		if [ $LINUX -eq 1 ]; then
-		    erofsfuse $1 "$TEMP"
+		    erofsfuse $2 "$TEMP"
 		    fs_converter $2
 		else
 		    erofs_converter_by_extract $2
