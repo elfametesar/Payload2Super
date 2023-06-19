@@ -16,18 +16,12 @@ erofs_converter_by_extract() {
 	remounter $1
 }
 
-other_fs_converter() {
+fs_converter() {
 	part_name=${1%.img}
-	fallocate -l 8000M ${part_name}_ext4.img
-	mke2fs -F -t ext4 -O sparse_super,extent -d "$TEMP" ${part_name}_ext4.img || { rm ${part_name}_ext4.img; exit 1; }
-	remounter $1
-}
-
-erofs_converter_by_mount() {
-	part_name=${1%.img}
-	erofsfuse $1 "$TEMP"
-	fallocate -l 8000M ${part_name}_ext4.img
-	mke2fs -F -t ext4 -O sparse_super,extent -d "$TEMP" ${part_name}_ext4.img || { rm ${part_name}_ext4.img; exit 1; }
+	awk '{ print $2 " " $1 }' "$HOME"/${part_name}_context > context
+	sed -i "s|\[|\\\[|g; s|\]|\\\]|g; s|\@|\\\@|g; s|\.|\\\.|g; s|\+|\\\+|g; s|$TEMP |$TEMP/\.\* |" context
+	make_ext4fs -S context -l 8912896000 -L $part_name -a "$TEMP" ${part_name}_ext4.img "$TEMP" || { rm ${part_name}_ext4.img context; exit 1; }
+	rm context
 	remounter $1
 }
 
@@ -36,10 +30,11 @@ set -x
 case $1 in
 	erofs)
 		if [ $LINUX -eq 1 ]; then
-		    erofs_converter_by_mount $2
+		    erofsfuse $1 "$TEMP"
+		    fs_converter $2
 		else
 		    erofs_converter_by_extract $2
 		fi
 		;;
-	other) other_fs_converter $2;;
+	other) fs_converter $2;;
 esac

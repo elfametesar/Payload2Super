@@ -357,8 +357,8 @@ pack() {
 			umount "$TEMP" || umount -l "$TEMP"
 		done
 		echo
+		getenforce >/dev/null 2>&1 && [ $READ_ONLY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext
 	}
-	getenforce >/dev/null 2>&1 && [ $READ_ONLY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext 2>> "$LOG_FILE"
 	if [ $BACK_TO_EROFS -eq 0 ] && [ $RESIZE -eq 0 ] && [ $READ_ONLY -eq 0 ] && [ $RECOVERY -eq 0 ]; then
 		printf "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
