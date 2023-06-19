@@ -117,6 +117,8 @@ kernel_patch() {
 }
 
 restore_secontext() {
+	echo "Restoring SELINUX contexts..."
+	echo
 	for img in $PARTS; do
 		[ -f "$HOME/${img%.img}_context" ] && [ -s "$HOME/${img%.img}_context" ] || continue
 		loop=$(losetup -f || losetup -f)
@@ -134,6 +136,8 @@ restore_secontext() {
 }
 
 preserve_secontext() {
+	echo "Preserving SELINUX contexts..."
+	echo
 	for img in $PARTS; do
 		[ -f "$HOME/${img%.img}_context" ] && [ -s "$HOME/${img%.img}_context" ] && continue 
 		loop=$(losetup -f || losetup -f)
