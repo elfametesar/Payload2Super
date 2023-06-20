@@ -124,6 +124,7 @@ toolchain_download() {
 	echo
 	mkdir "$HOME"/bin
 	tar xf ${URL##*/} -C "$HOME"/bin/
+	chmod +x -R "$HOME"/bin
 	rm ${URL##*/}
 }
 
@@ -219,7 +220,7 @@ read_write_check() {
 
 read_write() {
 	[ $LINUX -eq 1 ] && ! getenforce >/dev/null 2>&1 && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
-	$SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
+	[ $RECOVERY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
 	for img in $PARTS; do
 		if dump.erofs $img >/dev/null 2>&1; then 
 			echo "Converting EROFS ${img%.img} image to ext4"
