@@ -181,21 +181,21 @@ super_extract() {
 
 	echo "Unpacking super"
 	echo
+	case $SLOT in
+		_a) slot_param="--slot=0";;
+		_b) slot_param="--slot=1";;
+	esac
 	if [ -b "$ROM" ]; then
-		case $SLOT in
-			_a) slot_num=0;;
-			_b) slot_num=1;;
-		esac
-		if lpunpack --slot=$slot_num "$ROM" extracted 2>&1 | grep -q "sparse"; then
+		if lpunpack $slot_param "$ROM" extracted 2>&1 | grep -q "sparse"; then
 			echo "But extracting it from super block first because it is sparse"
 			echo
 			dd if=/dev/block/by-name/super of=super_sparse.img
 			simg2img super_sparse.img super.img
 			rm super_sparse.img
-			lpunpack --slot=$slot_num super.img extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
+			lpunpack $slot_param super.img extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 		fi
 	else
-		lpunpack "$ROM" extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
+		lpunpack $slot_param "$ROM" extracted 1> /dev/null || { echo "This is not a valid super image or block"; cleanup; exit 1; }
 	fi
 	rm "$HOME"/super* >/dev/null 2>&1
 	cd extracted
@@ -517,7 +517,9 @@ recovery() {
 main() {
 	set -x
 	ROM=$1
-	{ get_os_type; toolchain_check; }
+	get_os_type
+	toolchain_check
+	get_super_size
 	[ -z $CONTINUE ] && {
 		cleanup
 		if [ -z "$ROM" ] || [ ! -f "$ROM" ] && [ ! -b "$ROM" ]; then
@@ -549,7 +551,6 @@ main() {
 		esac
 	} || cd "$HOME"/extracted
 	{
-		get_super_size
 		get_partitions
 		get_read_write_state
 		[ $GRANT_RW -eq 1 ] && read_write
