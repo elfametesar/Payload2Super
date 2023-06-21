@@ -222,7 +222,7 @@ read_write_check() {
 
 read_write() {
 	[ $LINUX -eq 1 ] && ! getenforce >/dev/null 2>&1 && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
-	[ $RECOVERY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
+	$SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
 	for img in $PARTS; do
 		if dump.erofs $img >/dev/null 2>&1; then 
 			echo "Converting EROFS ${img%.img} image to ext4"
@@ -361,8 +361,8 @@ pack() {
 			umount "$TEMP" || umount -l "$TEMP"
 		done
 		echo
-		getenforce >/dev/null 2>&1 && [ $READ_ONLY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext
 	}
+	getenforce >/dev/null 2>&1 && [ $READ_ONLY -eq 0 ] && $SHELL "$HOME"/pay2sup_helper.sh restore_secontext
 	if [ $BACK_TO_EROFS -eq 0 ] && [ $RESIZE -eq 0 ] && [ $READ_ONLY -eq 0 ] && [ $RECOVERY -eq 0 ]; then
 		printf "Do you want to shrink partitions to their minimum sizes before repacking? (y/n): "
 		read shrink
