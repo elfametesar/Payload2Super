@@ -70,7 +70,7 @@ remove_overlay() {
 	mount_vendor
 	sed -i 's/^overlay/# overlay/' "$TEMP"/etc/fstab*
 	echo "$fstab_contexts" | while read context file; do
-		chcon $context $file
+		$TOYBOX chcon $context $file
 	done
 }
 
@@ -87,7 +87,7 @@ disable_encryption() {
                	s|,encryptable=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0||;
                	s|,quota||;s|inlinecrypt||;s|,wrappedkey||;s|,encryptable=footer||' "$TEMP"/etc/fstab*
 	echo "$fstab_contexts" | while read context file; do
-		chcon $context $file
+		$TOYBOX chcon $context $file
 	done
 	echo "Android file encryption system has been disabled succesfully"
 	echo
@@ -128,7 +128,7 @@ restore_secontext() {
 			case "$line" in *\[) line="${line%[}\[";; esac
 			context="$(grep $line$ $HOME/${img%.img}_context)"
 			[ -z "$context" ] && continue
-			chcon -h $context
+			$TOYBOX chcon -h $context
 		done 
 		{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2> /dev/null
 	done
