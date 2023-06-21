@@ -16,7 +16,7 @@ export BACK_TO_EROFS=0
 export RECOVERY=0
 
 trap "exit" INT
-trap "{ umount -d $TEMP || umount -d -l $TEMP; sed -i 's/+/[ DEBUG ]/g' $LOG_FILE; } 2> /dev/null" EXIT
+trap "{ umount -d $TEMP || umount -d -l $TEMP; sed -i 's/^+*/[ DEBUG ]/g' $LOG_FILE; } 2> /dev/null" EXIT
 
 [ "$PWD" = "/" ] && { echo "Working directory cannot be the root of your file system, it is dangerous"; exit 1; }
 
@@ -24,6 +24,8 @@ trap "{ umount -d $TEMP || umount -d -l $TEMP; sed -i 's/+/[ DEBUG ]/g' $LOG_FIL
 	echo "Program must be run as the root user, use sudo -E on Linux platforms and su for Android"
 	exit
 }
+
+setenforce 0
 
 TOOLCHAIN="make_ext4fs \
 	mkfs.erofs \
