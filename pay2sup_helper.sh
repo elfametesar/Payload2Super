@@ -72,7 +72,6 @@ remove_overlay() {
 	echo "$fstab_contexts" | while read context file; do
 		chcon $context $file
 	done
-	shrink "$vendor" 1> /dev/null
 }
 
 disable_encryption() {
