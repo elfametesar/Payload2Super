@@ -605,7 +605,7 @@ for _ in "$@"; do
 		"-d"| "--debloat")
 			export DEBLOAT=1
 			shift
-			[ -f "$1" ] && debloat_list="$(realpath $1)" || debloat_list="$HOME/debloat.txt"
+			[ -f "$1" ] && file "$1" | grep -q -i "text" && debloat_list="$(realpath $1)" || debloat_list="$HOME/debloat.txt"
 			[ ! -f "$debloat_list" ] && [ $RECOVERY -eq 0 ] &&  curl -k -L https://raw.githubusercontent.com/elfametesar/Payload2Super/experimental/debloat.txt -o debloat.txt >/dev/null 2>&1
 			continue;;
 		"-rw"| "--read-write")
