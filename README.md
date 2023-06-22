@@ -48,11 +48,11 @@ Example:
 
 ```
  ZipFile:
-    /pay2sup.sh
-    /pay2sup_helper.sh
-    /erofs_to_ext4.sh
     /META-INF
     /bin
+    /pay2sup.sh
+    /pay2sup_helper.sh
+    /fs_converter.sh
 ```
 
 This is a multi-platform tool, meaning it can work on both x64 Linux distros and ARM64 Android devices. ~~To use it on Linux distros, you need ADB access once to your device in order to get the super block size.~~ You can now use this tool without needing ADB access, by manually adding super block size and slot suffix.
