@@ -14,7 +14,7 @@ jobs:
       - name: Create directories
         run: |
           mkdir -p Payload2Super/branch
-          cp -r ./* Payload2Super/branch
+          cp -r !(Payload2Super) Payload2Super/branch
           rm -rf Payload2Super/branch/debloat.txt
 
       - name: Compress files
