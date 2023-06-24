@@ -13,7 +13,7 @@ jobs:
 
       - name: Exclude Files
         run: |
-          rm -rf debloat.txt .git .github
+          rm -rf debloat.txt .git .github README.md
   
       - name: Upload artifact
         uses: actions/upload-artifact@v2
