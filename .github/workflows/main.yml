@@ -11,14 +11,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Create directories
-        run: |
-          mkdir -p Payload2Super/branch
-          cp -r ./* Payload2Super/branch
-          rm -rf Payload2Super/branch/debloat.txt
-
       - name: Compress files
-        run: zip -j Payload2Super.zip Payload2Super/branch/*
+        run: zip -j Payload2Super.zip * -x debloat.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
