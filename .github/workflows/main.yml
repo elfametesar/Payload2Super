@@ -11,6 +11,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Exclude Files
+        run: |
+          rm -rf debloat.txt .git .github
+  
       - name: Upload artifact
         uses: actions/upload-artifact@v2
         with:
