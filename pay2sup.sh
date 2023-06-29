@@ -405,12 +405,12 @@ patch_kernel() {
 			echo "You have no kernel files in workspace for program to patch for EXT4. Provide the program kernel files by putting them in $PWD or program will have the skip this step. Press enter to continue."
 			echo
 			read
-			[ -f "boot.img" ] && [ -f "vendor_boot.img" ] || return
 		fi
 	fi
 	echo "Patching the kernel for EXT4 support.."
 	echo
 	for img in boot.img vendor_boot.img; do
+		[ -f $img ] || continue
 		$SHELL $HOME/pay2sup_helper.sh patch_kernel "$PWD/$img" 1> /dev/null || { echo "Cannot patch $img for EXT4 because of a problem, skipping..."; echo; continue; }
 	done
 }
