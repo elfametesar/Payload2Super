@@ -222,7 +222,6 @@ read_write_check() {
 
 read_write() {
 	[ $LINUX -eq 1 ] && ! getenforce >/dev/null 2>&1 && echo "Your distro does not have SELINUX therefore doesn't support read&write process. Continuing as read-only..." && echo && sleep 2 && export READ_ONLY=1 && return 1
-	$SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
 	for img in $PARTS; do
 		if dump.erofs $img >/dev/null 2>&1; then 
 			echo "Converting EROFS ${img%.img} image to ext4"
@@ -246,6 +245,7 @@ read_write() {
 		}
 		{ umount -d "$TEMP" || umount -d -l "$TEMP"; } 2>/dev/null
 	done
+	$SHELL "$HOME"/pay2sup_helper.sh preserve_secontext
 	export READ_ONLY=0
 }
 
@@ -383,13 +383,11 @@ pack() {
 		case $PARTS in *$img*)
 			lp_part_name=${img%.img}$SLOT
 			sum=$( calc $sum+$(stat -c%s $img) )
-			lp_parts="$lp_parts --partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img
-";;
+			lp_parts="$lp_parts --partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img";;
 		*)
 			mv $img "$HOME"/flashable/firmware-update;;
 		esac
 	done
-	lp_parts=$(printf "$lp_parts" | sort -t: -k3n | tr -d '\n')
 	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts $SPARSE --output $HOME/flashable/super.img"
 	echo "Packaging super image"
 	echo
