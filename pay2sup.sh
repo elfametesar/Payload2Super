@@ -383,11 +383,13 @@ pack() {
 		case $PARTS in *$img*)
 			lp_part_name=${img%.img}$SLOT
 			sum=$( calc $sum+$(stat -c%s $img) )
-			lp_parts="$lp_parts --partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img ";;
+			lp_parts="$lp_parts --partition $lp_part_name:readonly:$(stat -c%s $img):main --image $lp_part_name=$img
+";;
 		*)
 			mv $img "$HOME"/flashable/firmware-update;;
 		esac
 	done
+	lp_parts=$(printf "$lp_parts" | sort -t: -k3n | tr -d '\n')
 	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts $SPARSE --output $HOME/flashable/super.img"
 	echo "Packaging super image"
 	echo
