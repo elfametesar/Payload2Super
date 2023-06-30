@@ -389,7 +389,7 @@ pack() {
 			mv $img "$HOME"/flashable/firmware-update;;
 		esac
 	done
-	lp_parts=$(echo $lp_parts | sort -t: -nk2 | tr -d '\n')
+	lp_parts=$(printf "$lp_parts" | sort -t: -k3n | tr -d '\n')
 	lp_args="--metadata-size 65536 --super-name super --metadata-slots 2 --device super:$super_size --group main:$sum $lp_parts $SPARSE --output $HOME/flashable/super.img"
 	echo "Packaging super image"
 	echo
